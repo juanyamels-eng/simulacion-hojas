@@ -11,10 +11,11 @@ var leaf_manager: LeafManager
 var player: PlayerController
 var env: Environment
 var sun: DirectionalLight3D
-var sky_mat: ProceduralSkyMaterial
+var sky_mat: ShaderMaterial
 var menu_cam: Camera3D
 var falling: CPUParticles3D
 var rain: CPUParticles3D
+var atmosphere: Atmosphere
 var gates := {}
 var ducts: Array[SuctionDuct] = []
 var robot: RobotSweeper
@@ -116,48 +117,20 @@ func from_save(d: Dictionary) -> void:
 # ------------------------------------------------------------------ entorno
 
 func _build_environment() -> void:
-	var we := WorldEnvironment.new()
-	env = Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky := Sky.new()
-	sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.38, 0.55, 0.78)
-	sky_mat.sky_horizon_color = Color(0.95, 0.8, 0.62)
-	sky_mat.ground_horizon_color = Color(0.7, 0.6, 0.45)
-	sky_mat.ground_bottom_color = Color(0.3, 0.25, 0.18)
-	sky_mat.sun_angle_max = 20.0
-	sky.sky_material = sky_mat
-	sky.radiance_size = Sky.RADIANCE_SIZE_32
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.75
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_white = 6.0
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.92, 0.78, 0.6)
-	env.fog_density = 0.006
-	env.fog_sky_affect = 0.25
-	we.environment = env
-	add_child(we)
-	sun = DirectionalLight3D.new()
-	sun.light_color = Color(1.0, 0.88, 0.7)
-	sun.light_energy = 1.15
-	sun.shadow_enabled = true
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	sun.directional_shadow_max_distance = 42.0
-	sun.shadow_blur = 1.5
-	add_child(sun)
+	# Cielo, sol, niebla, etalonado y viñeta viven en Atmosphere (scripts/world/atmosphere.gd).
+	atmosphere = Atmosphere.new()
+	add_child(atmosphere)
+	atmosphere.build()
+	env = atmosphere.env
+	sun = atmosphere.sun
+	sky_mat = atmosphere.sky_mat
 	PerformanceManager.quality_changed.connect(_apply_quality)
 	_apply_quality(PerformanceManager.level)
 	_update_light(true)
 
 
 func _apply_quality(level: int) -> void:
-	var p: Dictionary = PerformanceManager.PRESETS[level]
-	sun.shadow_enabled = p["shadows"]
-	get_viewport().scaling_3d_scale = float(p["scale"])
-	if falling:
-		falling.amount = int(60 * float(p["particles"]))
+	atmosphere.apply_quality(level)
 
 
 func _noise_tex() -> Texture2D:
@@ -171,93 +144,44 @@ func _noise_tex() -> Texture2D:
 	return ImageTexture.create_from_image(img)
 
 
-func _update_light(force: bool = false) -> void:
-	# Mañana dorada → tarde clara → atardecer rosado, y vuelta a empezar.
-	var keys := [
-		[0.0, 18.0, Color(1.0, 0.8, 0.6), Color(0.45, 0.6, 0.8), Color(1.0, 0.78, 0.6), 0.95],
-		[0.33, 52.0, Color(1.0, 0.95, 0.85), Color(0.36, 0.56, 0.82), Color(0.92, 0.85, 0.72), 1.2],
-		[0.7, 26.0, Color(1.0, 0.82, 0.62), Color(0.42, 0.52, 0.75), Color(1.0, 0.72, 0.5), 1.05],
-		[0.92, 9.0, Color(1.0, 0.55, 0.38), Color(0.4, 0.4, 0.6), Color(1.0, 0.55, 0.45), 0.8],
-		[1.0, 18.0, Color(1.0, 0.8, 0.6), Color(0.45, 0.6, 0.8), Color(1.0, 0.78, 0.6), 0.95],
-	]
-	var a: Array = keys[0]
-	var b: Array = keys[1]
-	for k in keys.size() - 1:
-		if day_t >= float(keys[k][0]) and day_t <= float(keys[k + 1][0]):
-			a = keys[k]
-			b = keys[k + 1]
-			break
-	var t := inverse_lerp(float(a[0]), float(b[0]), day_t)
-	var elev := deg_to_rad(lerpf(a[1], b[1], t))
-	var az := deg_to_rad(-35.0 + day_t * 120.0)
-	sun.rotation = Vector3(-elev, az, 0.0)
-	sun.light_color = (a[2] as Color).lerp(b[2], t)
-	sun.light_energy = lerpf(a[5], b[5], t)
-	sky_mat.sky_top_color = (a[3] as Color).lerp(b[3], t)
-	sky_mat.sky_horizon_color = (a[4] as Color).lerp(b[4], t)
-	env.fog_light_color = sky_mat.sky_horizon_color.lerp(Color(0.9, 0.8, 0.65), 0.4)
+func _update_light(_force: bool = false) -> void:
+	# Amanecer → mañana dorada → mediodía claro → tarde → atardecer → crepúsculo breve, y vuelta a empezar.
+	# El menú principal usa siempre la luz dorada de media tarde.
+	atmosphere.update_light(Atmosphere.MENU_DAY if menu_mode else day_t)
 
 
 func _setup_particles() -> void:
-	falling = CPUParticles3D.new()
-	falling.amount = int(60 * float(PerformanceManager.preset()["particles"]))
-	falling.lifetime = 9.0
-	falling.preprocess = 9.0
-	falling.local_coords = false
-	falling.mesh = MeshFactory.leaf_mesh_lod()
-	var fm := StandardMaterial3D.new()
-	fm.vertex_color_use_as_albedo = true
-	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
-	falling.material_override = fm
-	falling.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	falling.emission_box_extents = Vector3(18, 1, 18)
-	falling.direction = Vector3(0.3, -1, 0.1)
-	falling.spread = 25.0
-	falling.gravity = Vector3(0.4, -0.6, 0.2)
-	falling.initial_velocity_min = 0.3
-	falling.initial_velocity_max = 0.8
-	falling.angular_velocity_min = -120.0
-	falling.angular_velocity_max = 120.0
-	falling.scale_amount_min = 0.8
-	falling.scale_amount_max = 1.4
-	var grad := Gradient.new()
-	grad.set_color(0, Color(0.95, 0.55, 0.15))
-	grad.set_color(1, Color(0.85, 0.3, 0.1))
-	grad.add_point(0.5, Color(0.98, 0.78, 0.2))
-	falling.color_initial_ramp = grad
-	falling.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(falling)
-	rain = CPUParticles3D.new()
-	rain.amount = 160
-	rain.lifetime = 1.0
-	rain.local_coords = false
-	rain.mesh = MeshFactory.box(Vector3(0.01, 0.35, 0.01))
-	rain.material_override = MeshFactory.mat(Color(0.75, 0.82, 0.9), 0.2, 0.3)
-	rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	rain.emission_box_extents = Vector3(14, 1, 14)
-	rain.direction = Vector3(0, -1, 0)
-	rain.spread = 3.0
-	rain.gravity = Vector3(0, -20, 0)
-	rain.initial_velocity_min = 8.0
-	rain.initial_velocity_max = 10.0
-	rain.emitting = false
-	rain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(rain)
+	atmosphere.build_particles()
+	falling = atmosphere.falling
+	rain = atmosphere.rain
 
 
 func _setup_menu_camera() -> void:
 	menu_cam = Camera3D.new()
-	menu_cam.fov = 60.0
+	menu_cam.fov = 50.0
+	menu_cam.near = 0.1
 	menu_cam.far = 420.0
 	add_child(menu_cam)
+	_place_menu_cam()
 
 
 func set_menu_mode(on: bool) -> void:
 	menu_mode = on
 	if on:
+		_place_menu_cam()
 		menu_cam.make_current()
 	else:
 		player.cam.camera.make_current()
+	_update_light(true)
+
+
+## Plano lento desde el jardín delantero: setos y valla en primer término, la fuente y la casa al fondo
+## (a la derecha, porque el menú ocupa la izquierda), bajo la luz dorada de la tarde. Va y vuelve sin cortes.
+func _place_menu_cam() -> void:
+	var s := sin(_menu_t * 0.04)
+	var pos := Vector3(-9.0 + s * 2.0, 4.3 + sin(_menu_t * 0.1) * 0.2, 23.5 - s * 1.0)
+	menu_cam.global_position = pos
+	menu_cam.look_at(Vector3(-8.5 + s * 1.6, 3.3, -14.0))
 
 
 # ------------------------------------------------------------------ puertas, conductos, postales
@@ -393,25 +317,28 @@ func _process(delta: float) -> void:
 	_wind_t += delta
 	var wind := Vector3(sin(_wind_t * 0.05) * 0.6 + 0.3, 0.0, cos(_wind_t * 0.037) * 0.5)
 	leaf_manager.sim.ambient_wind = wind
-	var focus := menu_cam.global_position if menu_mode else player.global_position
-	falling.global_position = focus + Vector3(0, 9, 0)
-	rain.global_position = focus + Vector3(0, 10, 0)
+	atmosphere.update_wind(wind, delta)
 	if menu_mode:
 		_menu_t += delta
-		var a := _menu_t * 0.04
-		menu_cam.global_position = Vector3(sin(a) * 9.0 + 4.0, 3.2 + sin(_menu_t * 0.2) * 0.4, 42.0 + cos(a) * 5.0)
-		menu_cam.look_at(Vector3(0, 3.0, 8.0))
+		_place_menu_cam()
+		atmosphere.follow(menu_cam.global_position, delta)
 		return
+	atmosphere.follow(player.global_position, delta)
 	_gust_t -= delta
 	if _gust_t <= 0.0:
 		_gust_t = randf_range(25.0, 55.0)
-		var center := player.global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6))
+		# Por delante de quien juega, para que vea el remolino que levanta.
+		var fwd := player.cam.forward()
+		fwd.y = 0.0
+		fwd = fwd.normalized() if fwd.length_squared() > 0.001 else Vector3.FORWARD
+		var center := player.global_position + fwd * randf_range(3.0, 8.0) + fwd.cross(Vector3.UP) * randf_range(-4.0, 4.0)
 		var n := leaf_manager.sim.kick(center, 4.0, wind.normalized() * 2.2, 1.2, 25)
 		if n > 0:
 			AudioManager.play_sfx("gust", Vector3.INF, -8.0)
+			atmosphere.gust(Vector3(center.x, terrain.height_at(center.x, center.z), center.z))
 	# Llovizna ligera tras completar la campaña.
 	if ProgressManager.has_flag("campaign_done"):
-		rain.emitting = day_t > 0.75 and day_t < 0.85
+		atmosphere.set_rain(day_t > 0.75 and day_t < 0.85)
 	if GameManager.is_time_attack() and not _ta_done and GameManager.in_game:
 		_ta_time += delta
 		var zid := GameManager.time_attack_zone
