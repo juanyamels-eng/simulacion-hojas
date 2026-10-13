@@ -1,0 +1,63 @@
+; Engine configuration file.
+; Villa Hojarasca — juego 3D de limpieza de hojas para Android.
+
+config_version=5
+
+[application]
+
+config/name="Villa Hojarasca"
+config/description="Restaura una finca otoñal abandonada, hoja a hoja."
+config/version="0.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/quit_on_go_back=false
+config/auto_accept_quit=false
+config/features=PackedStringArray("4.5", "GL Compatibility")
+boot_splash/bg_color=Color(0.16, 0.1, 0.07, 1)
+boot_splash/show_image=false
+config/icon="res://icon.png"
+
+[autoload]
+
+EventBus="*res://scripts/autoload/event_bus.gd"
+SettingsManager="*res://scripts/autoload/settings_manager.gd"
+SaveManager="*res://scripts/autoload/save_manager.gd"
+EconomyManager="*res://scripts/autoload/economy_manager.gd"
+UpgradeManager="*res://scripts/autoload/upgrade_manager.gd"
+AreaManager="*res://scripts/autoload/area_manager.gd"
+ProgressManager="*res://scripts/autoload/progress_manager.gd"
+ObjectiveManager="*res://scripts/autoload/objective_manager.gd"
+AchievementManager="*res://scripts/autoload/achievement_manager.gd"
+CollectibleManager="*res://scripts/autoload/collectible_manager.gd"
+AudioManager="*res://scripts/autoload/audio_manager.gd"
+HapticManager="*res://scripts/autoload/haptic_manager.gd"
+PerformanceManager="*res://scripts/autoload/performance_manager.gd"
+GameManager="*res://scripts/autoload/game_manager.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+window/vsync/vsync_mode=1
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=4
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/size.mobile=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=1
+lights_and_shadows/positional_shadow/atlas_size=0
+anti_aliasing/quality/msaa_3d=0
+environment/defaults/default_clear_color=Color(0.16, 0.1, 0.07, 1)
+textures/canvas_textures/default_texture_filter=1
