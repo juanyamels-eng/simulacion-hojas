@@ -24,6 +24,8 @@ func _draw() -> void:
 	var origin := (size - BOUNDS.size * k) * 0.5
 	draw_rect(Rect2(origin - Vector2(8, 8), BOUNDS.size * k + Vector2(16, 16)), Color(0.85, 0.76, 0.6))
 	var font := get_theme_default_font()
+	# La casa va debajo de los rótulos para no taparlos.
+	draw_rect(Rect2(_to_map(Vector2(-11, -23), origin, k), Vector2(22, 9) * k), Color(0.92, 0.85, 0.72, 0.55))
 	for z in GameData.ZONES:
 		if z.get("secret", false) and not ProgressManager.has_flag("secret_found"):
 			continue
@@ -39,13 +41,14 @@ func _draw() -> void:
 		draw_rect(mr.grow(-2), col)
 		draw_rect(mr.grow(-2), Color(0.3, 0.2, 0.12), false, 2.0)
 		var zname: String = z["name"]
-		var txt := zname if unlocked else zname + " (cerrado)"
+		# El tamaño del rótulo se ajusta para que el nombre quepa entero en su recuadro.
 		var fs := int(clampf(k * 3.2, 12, 22))
-		draw_string(font, mr.position + Vector2(8, fs + 4), txt, HORIZONTAL_ALIGNMENT_LEFT, mr.size.x - 12, fs, Color(1, 0.97, 0.9))
-		if unlocked:
-			draw_string(font, mr.position + Vector2(8, fs * 2 + 10), ("%.1f %%" % (pct * 100.0)).replace(".", ","), HORIZONTAL_ALIGNMENT_LEFT, mr.size.x - 12, fs + 4, Color(1, 0.95, 0.75))
-	# Casa.
-	draw_rect(Rect2(_to_map(Vector2(-11, -23), origin, k), Vector2(22, 9) * k), Color(0.92, 0.85, 0.72))
+		while fs > 10 and font.get_string_size(zname, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > mr.size.x - 14:
+			fs -= 1
+		draw_string(font, mr.position + Vector2(8, fs + 6), zname, HORIZONTAL_ALIGNMENT_LEFT, mr.size.x - 12, fs, Color(1, 0.97, 0.9))
+		var sub := ("%.1f %%" % (pct * 100.0)).replace(".", ",") if unlocked else "Cerrada"
+		var sub_col := Color(1, 0.95, 0.75) if unlocked else Color(0.95, 0.9, 0.85, 0.75)
+		draw_string(font, mr.position + Vector2(8, fs * 2 + 12), sub, HORIZONTAL_ALIGNMENT_LEFT, mr.size.x - 12, fs + (4 if unlocked else 0), sub_col)
 	var p: Node3D = GameManager.world.player if GameManager.world else null
 	if p:
 		var pp := Vector2(p.global_position.x, p.global_position.z)
@@ -54,5 +57,6 @@ func _draw() -> void:
 		var mp := _to_map(pp, origin, k)
 		var fwd := -p.global_transform.basis.z
 		var dir := Vector2(fwd.x, fwd.z).normalized()
-		draw_colored_polygon(PackedVector2Array([mp + dir * 14, mp + dir.rotated(2.5) * 9, mp + dir.rotated(-2.5) * 9]), Color(0.9, 0.15, 0.1))
-		draw_circle(mp, 5, Color(1, 1, 1))
+		draw_circle(mp, 13, Color(1, 1, 1, 0.85))
+		draw_colored_polygon(PackedVector2Array([mp + dir * 18, mp + dir.rotated(2.5) * 11, mp + dir.rotated(-2.5) * 11]), Color(0.85, 0.15, 0.1))
+		draw_circle(mp, 5, Color(0.85, 0.15, 0.1))
