@@ -89,7 +89,10 @@ func _ready() -> void:
 
 ## Punto de enganche para sistemas visuales adicionales (césped, decoración dinámica...).
 func _setup_visual_extras() -> void:
-	pass
+	# Césped real alrededor de la cámara: oculto bajo la hojarasca, aparece al limpiar.
+	var grass := GrassField.new()
+	add_child(grass)
+	grass.setup(terrain, leaf_manager)
 
 
 ## Punto de enganche para sistemas de juego adicionales (compañero, guías...).

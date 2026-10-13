@@ -19,7 +19,13 @@ var solid := PackedByteArray()
 var cell_zone := PackedByteArray()
 var ground_bytes := PackedByteArray()   # RGBA8: camino, tierra, grava, id de zona
 var ground_tex: ImageTexture
+var ao_tex: ImageTexture        # oclusión suave junto a muros, troncos y vallas (1 m por píxel)
+var height_tex: ImageTexture    # alturas en media precisión (para el césped instanciado)
+var noise_tex: Texture2D
+var pile_tex: Texture2D
 var material: ShaderMaterial
+var extra_materials: Array[ShaderMaterial] = []   # otros shaders que siguen el % limpio de cada zona
+var _zone_clean := PackedFloat32Array()
 var _pads: Array = []          # [Rect2, altura]
 var _hills: Array = []         # [Vector2 centro, radio, altura]
 
@@ -188,13 +194,18 @@ func _paint(c: int, channel: int, value: float) -> void:
 
 
 ## Construye las mallas del suelo y su colisión (después de pintar).
-func build(pile_tex: Texture2D, noise_tex: Texture2D) -> void:
+func build(pile_texture: Texture2D, noise_texture: Texture2D) -> void:
+	pile_tex = pile_texture
+	noise_tex = noise_texture
 	ground_tex = ImageTexture.create_from_image(Image.create_from_data(gw, gh, false, Image.FORMAT_RGBA8, ground_bytes))
+	ao_tex = _build_ao_tex()
+	height_tex = _build_height_tex()
 	material = ShaderMaterial.new()
 	material.shader = load("res://shaders/ground.gdshader")
 	material.set_shader_parameter("pile_tex", pile_tex)
 	material.set_shader_parameter("ground_tex", ground_tex)
 	material.set_shader_parameter("noise_tex", noise_tex)
+	material.set_shader_parameter("ao_tex", ao_tex)
 	material.set_shader_parameter("grid_rect", Vector4(origin.x, origin.y, 1.0 / GameData.GRID_SIZE_M.x, 1.0 / GameData.GRID_SIZE_M.y))
 	material.set_shader_parameter("grid_size", Vector2(gw, gh))
 	var playable: Array[Rect2] = []
@@ -215,18 +226,108 @@ func build(pile_tex: Texture2D, noise_tex: Texture2D) -> void:
 					break
 			if used:
 				_build_chunk(cx, cz, body)
-	# Campo exterior: plano grande y barato.
+	# Campo exterior: plano grande y barato, con manchas de pradera para que no se vea liso.
 	var outer := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(520, 520)
 	outer.mesh = pm
 	outer.position = Vector3(0, OUTER_Y, 0)
-	var om := StandardMaterial3D.new()
-	om.albedo_color = Color(0.43, 0.5, 0.24)
-	om.roughness = 1.0
+	var sh := Shader.new()
+	sh.code = OUTER_SHADER
+	var om := ShaderMaterial.new()
+	om.shader = sh
+	om.set_shader_parameter("noise_tex", noise_tex)
 	outer.material_override = om
 	outer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(outer)
+	PerformanceManager.quality_changed.connect(_apply_quality)
+	_apply_quality(PerformanceManager.level)
+
+
+const OUTER_SHADER := """
+shader_type spatial;
+render_mode specular_disabled, diffuse_lambert_wrap;
+uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
+varying vec2 wxz;
+void vertex() {
+	wxz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+}
+void fragment() {
+	float n1 = texture(noise_tex, wxz * 0.011).r;
+	float n2 = texture(noise_tex, wxz * 0.06).r;
+	vec3 c = mix(vec3(0.3, 0.42, 0.16), vec3(0.47, 0.5, 0.22), smoothstep(0.3, 0.75, n1));
+	c *= 0.86 + 0.28 * n2;
+	ALBEDO = c;
+	ROUGHNESS = 1.0;
+}
+"""
+
+
+## Detalle procedural del suelo (losas, hojarasca dibujada, flores) según la calidad gráfica.
+func _apply_quality(level: int) -> void:
+	if material == null:
+		return
+	var dist := 26.0
+	if level == PerformanceManager.LOW:
+		dist = 0.0
+	elif level == PerformanceManager.MEDIUM:
+		dist = 20.0
+	material.set_shader_parameter("detail_dist", dist)
+
+
+## Oclusión ambiental barata: máscara de celdas sólidas (sin las puertas, que se abren) suavizada.
+func _build_ao_tex() -> ImageTexture:
+	var n := gw * gh
+	var mask := PackedByteArray()
+	mask.resize(n)
+	mask.fill(0)
+	for c in n:
+		if solid[c] != 0:
+			mask[c] = 255
+	for g in GameData.GATES:
+		var gp: Vector2 = g["pos"]
+		var half := Vector2(2.0, 0.6) if g["axis"] == "x" else Vector2(0.6, 2.0)
+		var x0 := clampi(int(floor((gp.x - half.x - origin.x) * inv_cell)), 0, gw - 1)
+		var x1 := clampi(int(ceil((gp.x + half.x - origin.x) * inv_cell)), 0, gw - 1)
+		var z0 := clampi(int(floor((gp.y - half.y - origin.y) * inv_cell)), 0, gh - 1)
+		var z1 := clampi(int(ceil((gp.y + half.y - origin.y) * inv_cell)), 0, gh - 1)
+		for j in range(z0, z1 + 1):
+			for i in range(x0, x1 + 1):
+				mask[j * gw + i] = 0
+	var img := Image.create_from_data(gw, gh, false, Image.FORMAT_L8, mask)
+	img.shrink_x2()
+	var wide := img.duplicate() as Image
+	wide.shrink_x2()
+	wide.resize(img.get_width(), img.get_height(), Image.INTERPOLATE_BILINEAR)
+	var a := img.get_data()
+	var b := wide.get_data()
+	for i in a.size():
+		a[i] = mini(int(a[i] * 1.15 + b[i] * 0.7), 255)
+	return ImageTexture.create_from_image(Image.create_from_data(img.get_width(), img.get_height(), false, Image.FORMAT_L8, a))
+
+
+## Alturas del terreno como textura de media precisión (filtrable en GLES3).
+func _build_height_tex() -> ImageTexture:
+	var img := Image.create_from_data(hw, gh + 1, false, Image.FORMAT_RF, heights.to_byte_array())
+	img.convert(Image.FORMAT_RH)
+	return ImageTexture.create_from_image(img)
+
+
+## Parámetros comunes para otros shaders que se apoyan en el suelo (césped).
+func bind_ground_params(m: ShaderMaterial) -> void:
+	m.set_shader_parameter("pile_tex", pile_tex)
+	m.set_shader_parameter("ground_tex", ground_tex)
+	m.set_shader_parameter("noise_tex", noise_tex)
+	m.set_shader_parameter("ao_tex", ao_tex)
+	m.set_shader_parameter("height_tex", height_tex)
+	m.set_shader_parameter("grid_rect", Vector4(origin.x, origin.y, 1.0 / GameData.GRID_SIZE_M.x, 1.0 / GameData.GRID_SIZE_M.y))
+	m.set_shader_parameter("grid_size", Vector2(gw, gh))
+	m.set_shader_parameter("height_map", Vector4(origin.x, origin.y, inv_cell, 0.0))
+	m.set_shader_parameter("height_size", Vector2(hw, gh + 1))
+	if not extra_materials.has(m):
+		extra_materials.append(m)
+	if _zone_clean.size() > 0:
+		m.set_shader_parameter("zone_clean", _zone_clean)
 
 
 func _build_chunk(cx: int, cz: int, body: StaticBody3D) -> void:
@@ -283,5 +384,8 @@ func _build_chunk(cx: int, cz: int, body: StaticBody3D) -> void:
 
 
 func set_zone_clean(values: PackedFloat32Array) -> void:
+	_zone_clean = values
 	if material:
 		material.set_shader_parameter("zone_clean", values)
+	for m in extra_materials:
+		m.set_shader_parameter("zone_clean", values)
