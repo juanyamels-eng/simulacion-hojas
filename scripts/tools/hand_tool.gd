@@ -89,7 +89,7 @@ func process_tool(delta: float, held: bool, pressed: bool) -> void:
 
 func _grab(level: int, fresh: bool = true) -> void:
 	var speed := float(UpgradeManager.get_value("interact_speed"))
-	_cooldown = (0.32 if level < 4 else 0.36) / speed
+	_cooldown = (0.32 if level < 4 else 0.4) / speed
 	var space := player.bags.space()
 	if space <= 0:
 		_cooldown = 0.6
@@ -105,13 +105,11 @@ func _grab(level: int, fresh: bool = true) -> void:
 		return
 	# Hojas sueltas: se cogen de una en una en un radio pequeño. En un montón se cogen brazadas,
 	# así que rastrillar primero (y mejorar la mano) compensa de verdad.
-	var radius := 0.6
+	var radius := 0.62
 	if level >= 5:
-		radius = 1.3
-	elif level >= 2:
-		radius = 0.75
+		radius = 1.15
 	var count := int(UpgradeManager.get_value("hand"))
-	if lm.sim.count_in_radius(point, 0.9) >= 14:
+	if lm.sim.count_in_radius(point, 0.9) >= 22:
 		count *= 4
 		radius *= 1.6
 	count = mini(count, space)

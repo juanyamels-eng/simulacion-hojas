@@ -13,7 +13,7 @@ const START_POS := Vector3(0.0, 1.0, 60.0)
 
 # Zonas: rect = Rect2(x, z, ancho, fondo).
 const ZONES := [
-	{"id": "entrada", "name": "Entrada", "rect": Rect2(-20, 40, 40, 24), "leaves": 2600, "value": 0.6, "color": Color(0.93, 0.62, 0.25)},
+	{"id": "entrada", "name": "Entrada", "rect": Rect2(-20, 40, 40, 24), "leaves": 2600, "value": 0.8, "color": Color(0.93, 0.62, 0.25)},
 	{"id": "jardin_delantero", "name": "Jardín delantero", "rect": Rect2(-20, 10, 40, 30), "leaves": 3600, "value": 1.4, "color": Color(0.85, 0.45, 0.2)},
 	{"id": "patio_principal", "name": "Patio principal", "rect": Rect2(-20, -25, 40, 35), "leaves": 4200, "value": 3.0, "color": Color(0.8, 0.35, 0.22)},
 	{"id": "garaje", "name": "Garaje", "rect": Rect2(20, 10, 40, 30), "leaves": 3600, "value": 2.0, "color": Color(0.7, 0.5, 0.3)},
