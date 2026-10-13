@@ -8,12 +8,22 @@ const P_VACUUM := 1
 const P_DUCT0 := 2
 const P_ROBOT := 12
 
+# Paleta general de otoño [color, peso] (la usan otros sistemas: partículas, decoración...).
 const PALETTE := [
 	[Color(0.96, 0.76, 0.18), 0.27],
 	[Color(0.95, 0.52, 0.12), 0.3],
 	[Color(0.84, 0.24, 0.1), 0.18],
 	[Color(0.58, 0.35, 0.16), 0.19],
 	[Color(0.5, 0.62, 0.2), 0.06],
+]
+
+# Especies de hoja: [peso, escala mínima, escala máxima, paleta [[color, peso]...]].
+# La silueta (arce, roble, lanceolada, acorazonada) la dibuja LeafMeshes según la especie.
+const SPECIES := [
+	[0.4, 0.9, 1.3, [[Color(0.86, 0.2, 0.08), 0.28], [Color(0.94, 0.38, 0.1), 0.3], [Color(0.96, 0.58, 0.12), 0.26], [Color(0.97, 0.76, 0.2), 0.16]]],
+	[0.22, 0.85, 1.2, [[Color(0.6, 0.33, 0.13), 0.34], [Color(0.75, 0.46, 0.18), 0.3], [Color(0.84, 0.38, 0.12), 0.2], [Color(0.48, 0.29, 0.13), 0.16]]],
+	[0.18, 0.8, 1.15, [[Color(0.97, 0.78, 0.22), 0.4], [Color(0.94, 0.62, 0.16), 0.3], [Color(0.72, 0.7, 0.24), 0.18], [Color(0.86, 0.5, 0.14), 0.12]]],
+	[0.2, 0.75, 1.1, [[Color(0.99, 0.84, 0.3), 0.38], [Color(0.95, 0.69, 0.18), 0.3], [Color(0.58, 0.64, 0.2), 0.14], [Color(0.9, 0.55, 0.16), 0.18]]],
 ]
 
 var sim := LeafSimulationSystem.new()
@@ -42,11 +52,12 @@ func setup(t: Terrain, density_points: Array, saved: PackedByteArray, only_zone:
 	zone_filter = only_zone
 	sim.setup_grid(t)
 	cluster.setup(sim.gw, sim.gh)
-	leaf_mesh = MeshFactory.leaf_mesh()
-	leaf_mesh_lod = MeshFactory.leaf_mesh_lod()
+	leaf_mesh = LeafMeshes.leaf_mesh()
+	leaf_mesh_lod = LeafMeshes.leaf_mesh_lod()
 	material = ShaderMaterial.new()
 	material.shader = load("res://shaders/leaf.gdshader")
 	material.set_shader_parameter("pile_tex", cluster.tex)
+	material.set_shader_parameter("vein_tex", LeafMeshes.vein_texture())
 	material.set_shader_parameter("grid_rect", Vector4(sim.ox, sim.oz, 1.0 / GameData.GRID_SIZE_M.x, 1.0 / GameData.GRID_SIZE_M.y))
 	material.set_shader_parameter("pile_max", LeafClusterSystem.PILE_MAX)
 	sim.create_chunk = _create_chunk_node
@@ -130,24 +141,37 @@ func _generate(density_points: Array) -> void:
 	orig_pos = gen_pos
 	rng.seed = 777
 	var total_w := 0.0
-	for pe in PALETTE:
-		total_w += float(pe[1])
+	for sp in SPECIES:
+		total_w += float(sp[0])
 	for i in sim.n:
 		sim.pos[i] = gen_pos[i]
 		sim.zone_origin[i] = gen_zone[i]
 		sim.zone_initial[gen_zone[i]] += 1
 		sim.yaw[i] = rng.randf() * TAU
 		var pick := rng.randf() * total_w
-		var col: Color = PALETTE[0][0]
-		for pe in PALETTE:
-			pick -= float(pe[1])
+		var species := 0
+		for k in SPECIES.size():
+			pick -= float(SPECIES[k][0])
 			if pick <= 0.0:
+				species = k
+				break
+		var spec: Array = SPECIES[species]
+		var pal: Array = spec[3]
+		var pal_w := 0.0
+		for pe in pal:
+			pal_w += float(pe[1])
+		var cpick := rng.randf() * pal_w
+		var col: Color = pal[0][0]
+		for pe in pal:
+			cpick -= float(pe[1])
+			if cpick <= 0.0:
 				col = pe[0]
 				break
-		var tone := rng.randf_range(0.82, 1.08)
-		col = Color(col.r * tone, col.g * tone * rng.randf_range(0.92, 1.06), col.b * tone, 1.0)
+		var tone := rng.randf_range(0.84, 1.08)
+		col = Color(col.r * tone, col.g * tone * rng.randf_range(0.93, 1.06), col.b * tone, 1.0)
 		sim.colr[i] = col
-		sim.cust[i] = Color(rng.randf_range(0.75, 1.35), rng.randf(), rng.randf_range(0.84, 1.02), rng.randf())
+		var shape := (float(species) + rng.randf() * 0.96) / float(SPECIES.size())
+		sim.cust[i] = Color(rng.randf_range(float(spec[1]), float(spec[2])), rng.randf(), rng.randf_range(0.9, 1.03), shape)
 
 
 func _create_chunk_node(c: int) -> MultiMesh:
