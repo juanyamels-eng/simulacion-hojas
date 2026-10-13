@@ -95,7 +95,9 @@ func build(r: Node3D, t: Terrain) -> void:
 	_zone_laberinto()
 	_zone_invernadero()
 	_zone_secret()
+	rng.seed = 20241015   # el bosque exterior (que la calidad baja aclara) no altera lo demás
 	_outside()
+	rng.seed = 20241016
 	for z in GameData.ZONES:
 		_zone_decor(z)
 	_flush()
@@ -160,7 +162,8 @@ func add(shape: String, color: Color, pos: Vector3, size: Vector3, rot_y: float 
 func add_basis(shape: String, color: Color, pos: Vector3, basis: Basis, shadow: bool = true, ao: float = -1.0, detail: bool = false) -> void:
 	if ao < 0.0:
 		ao = clampf(0.35 * maxf(basis.x.length(), basis.z.length()), 0.12, 0.9)
-	put(shape, K_PROP, Transform3D(basis, pos), color, Color(_ground(pos), ao, rng.randf(), 0.0), shadow, detail)
+	var sd := drng.randf() if detail else rng.randf()
+	put(shape, K_PROP, Transform3D(basis, pos), color, Color(_ground(pos), ao, sd, 0.0), shadow, detail)
 
 
 ## Pieza en el marco local de un objeto (posición y giro), con tamaño en metros.
@@ -170,7 +173,8 @@ func ladd(shape: String, color: Color, frame: Transform3D, lpos: Vector3, size: 
 
 ## Follaje (copas, setos, arbustos): sway = vaivén por viento, ao = radio de oclusión con el suelo.
 func fol(shape: String, color: Color, pos: Vector3, basis: Basis, sway: float = 0.5, ao: float = 0.0, shadow: bool = true, detail: bool = false) -> void:
-	put(shape, K_FOL, Transform3D(basis, pos), color, Color(_ground(pos), sway, rng.randf(), ao), shadow, detail)
+	var sd := drng.randf() if detail else rng.randf()
+	put(shape, K_FOL, Transform3D(basis, pos), color, Color(_ground(pos), sway, sd, ao), shadow, detail)
 
 
 ## Cristal luminoso de farola (material compartido con Atmosphere, que lo enciende al atardecer).
@@ -205,7 +209,7 @@ func _flush() -> void:
 		var mi := _mm_node(meshes[b["id"]], mat, xs, b["c"], b["d"])
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if b["shadow"] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if b["detail"]:
-			mi.visibility_range_end = detail_range
+			mi.visibility_range_end = detail_range + mi.get_aabb().size.length() * 0.5
 		holder.add_child(mi)
 		batch_count += 1
 		instance_count += xs.size()

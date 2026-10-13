@@ -33,6 +33,12 @@ func _on_stat(key: String, _value: float) -> void:
 			SaveManager.request_save()
 
 
+## Revisa todos los objetivos (p. ej. al cargar una partida con objetivos nuevos ya cumplidos).
+func recheck() -> void:
+	for o in GameData.OBJECTIVES:
+		_on_stat(String(o["stat"]), 0.0)
+
+
 ## Siguientes objetivos pendientes (para el HUD y el diario).
 func pending(limit: int = 3) -> Array:
 	var out := []

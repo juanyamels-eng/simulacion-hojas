@@ -140,9 +140,10 @@ func _on_open_menu(menu: String) -> void:
 				confirm("¿Salir del juego?", func(): GameManager.quit_game())
 
 
-func open_journal(tab: String, title: String = "") -> void:
+func open_journal(tab: String, title: String = "", shop_cat: String = "") -> void:
 	var j := Journal.new()
 	j.tab = tab
+	j.shop_category = shop_cat
 	if title != "":
 		j.set_title(title)
 	push(j)

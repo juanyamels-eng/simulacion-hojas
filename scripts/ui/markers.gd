@@ -111,6 +111,9 @@ static func nearest_loose_bag(pp: Vector3, max_dist: float) -> LeafBag:
 		var b := n as LeafBag
 		if b == null or b.consumed or not b.is_inside_tree():
 			continue
+		var zid := AreaManager.zone_at(b.global_position)
+		if zid != "" and not AreaManager.is_unlocked(zid) and b.global_position.distance_to(pp) > 3.0:
+			continue
 		var d := b.global_position.distance_squared_to(pp)
 		if d < best_d and absf(b.global_position.y - pp.y) < 4.0:
 			best_d = d
@@ -119,7 +122,12 @@ static func nearest_loose_bag(pp: Vector3, max_dist: float) -> LeafBag:
 
 
 ## Zona de la pantalla donde se fijan los marcadores fuera de cámara (evita el HUD y los botones).
+var area := Rect2()   # zona libre de paneles (la fija el HUD cada fotograma)
+
+
 func edge_rect() -> Rect2:
+	if area.size.x > 10.0 and area.size.y > 10.0:
+		return area
 	var vs := get_viewport_rect().size
 	return Rect2(Vector2(70, 132), Vector2(vs.x - 140, vs.y * 0.62 - 132))
 
@@ -206,6 +214,7 @@ func _fade(col: Color, a: float) -> Color:
 func _text(at: Vector2, text: String, fs: int, a: float) -> void:
 	var w := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var pos := at - Vector2(w * 0.5, 0)
+	pos.x = clampf(pos.x, 8.0, get_viewport_rect().size.x - w - 8.0)
 	draw_string_outline(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0.2, 0.12, 0.06, 0.9 * a))
 	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _fade(UITheme.CREAM, a))
 

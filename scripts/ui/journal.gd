@@ -5,6 +5,7 @@ extends Modal
 const TABS := [["map", "MAPA"], ["objectives", "OBJETIVOS"], ["shop", "MEJORAS"], ["collection", "COLECCIÓN"], ["stats", "ESTADÍSTICAS"], ["achievements", "LOGROS"]]
 
 var tab := "map"
+var shop_category := ""
 var _tabs: HBoxContainer
 var _body: Control
 
@@ -44,7 +45,10 @@ func _show(id: String) -> void:
 		"map": _body = _map()
 		"objectives": _body = _objectives()
 		"shop":
-			_body = ShopPanel.new()
+			var sp := ShopPanel.new()
+			if shop_category != "":
+				sp.category = shop_category
+			_body = sp
 		"collection": _body = _collection()
 		"stats": _body = _stats()
 		"achievements": _body = _achievements()

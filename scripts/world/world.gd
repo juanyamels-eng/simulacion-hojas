@@ -95,7 +95,7 @@ func _ready() -> void:
 func _setup_pool_ladders() -> void:
 	var r := Terrain.POOL
 	var steel := MeshFactory.mat(Color(0.75, 0.78, 0.8), 0.35)
-	for spec in [[Vector2(44.0, r.end.y - 0.45), Vector2(44.0, r.end.y + 1.0), 0.0], [Vector2(44.0, r.position.y + 0.45), Vector2(44.0, r.position.y - 1.0), PI]]:
+	for spec in [[Vector2(44.0, r.end.y - 0.45), Vector2(44.0, r.end.y + 1.0), 0.0, false], [Vector2(44.0, r.position.y + 0.45), Vector2(44.0, r.position.y - 1.0), PI, true]]:
 		var inside: Vector2 = spec[0]
 		var out: Vector2 = spec[1]
 		var floor_y := terrain.height_at(inside.x, inside.y)
@@ -106,6 +106,9 @@ func _setup_pool_ladders() -> void:
 		s.collision_layer = Interactable.LAYER_INTERACT
 		Interactable.make_shape(s, Vector3(1.0, 2.2, 0.6), Vector3(0, 1.1, 0))
 		s.setup(StationObject.Kind.LADDER, {"target": Vector3(out.x, top + 0.1, out.y), "prompt": "Salir de la piscina"})
+		if not bool(spec[3]):
+			add_child(s)
+			continue
 		for sx in [-0.3, 0.3]:
 			var rail := MeshInstance3D.new()
 			rail.mesh = MeshFactory.cyl(0.03, 0.03, top - floor_y + 0.9, 8)

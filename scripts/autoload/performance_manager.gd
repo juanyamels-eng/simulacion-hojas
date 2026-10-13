@@ -37,7 +37,7 @@ func _from_settings() -> void:
 		_:
 			if not auto:
 				level = MEDIUM
-	if prev != level or not auto:
+	if prev != level:
 		quality_changed.emit(level)
 
 

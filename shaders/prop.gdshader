@@ -120,7 +120,8 @@ void fragment() {
 		float fy = fract(r);
 		float x = u / 0.32 + mod(row, 2.0) * 0.5;
 		float fx = fract(x);
-		float scallop = 0.32 * (1.0 - pow(2.0 * fx - 1.0, 2.0));
+		float sx = 2.0 * fx - 1.0;
+		float scallop = 0.32 * (1.0 - sx * sx);
 		float lower = smoothstep(scallop - 0.06, scallop + 0.04, fy);
 		float fade = 1.0 - smoothstep(rh * 0.25, rh * 0.6, fw);
 		float tint = 0.85 + 0.28 * hash2(vec2(floor(x), row));

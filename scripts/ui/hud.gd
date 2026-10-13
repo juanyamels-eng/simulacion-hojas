@@ -196,6 +196,7 @@ func _panel(radius: int = 18) -> PanelContainer:
 func _build() -> void:
 	_markers = GuideMarkers.new()
 	add_child(_markers)
+	move_child(_markers, -1)
 	for c in [UITheme.GREEN, Color(0.93, 0.66, 0.18), UITheme.RED]:
 		_fill_styles.append(UITheme.box(c, 10, Color(0, 0, 0, 0), 0, 0))
 	_top_left = _panel()
@@ -394,6 +395,8 @@ func _process(delta: float) -> void:
 	_update_radar(delta, p)
 	_tutorial(delta, p)
 	_markers.visible = InputState.enabled
+	var top := _top_left.position.y + _top_left.size.y + 34.0
+	_markers.area = Rect2(_safe.position.x + 50.0, top, _safe.size.x - 100.0, maxf(_safe.position.y + _safe.size.y * 0.62 - top, 60.0))
 	_markers.update_markers(delta, p)
 	_update_upgrade_badge(delta)
 	_update_feedback(delta, p)
@@ -510,7 +513,7 @@ func add_toast(title: String, body: String, kind: String) -> void:
 	v.add_child(b)
 	p.modulate.a = 0.0
 	_toasts.add_child(p)
-	while _toasts.get_child_count() > 4:
+	while _toasts.get_child_count() > 3:
 		var old := _toasts.get_child(0)
 		_toasts.remove_child(old)
 		old.queue_free()
@@ -525,12 +528,18 @@ func _on_money_earned(amount: float, world_pos: Vector3) -> void:
 	var l := UITheme.outlined("+" + EconomyManager.format_money(amount), 34, UITheme.GOLD)
 	add_child(l)
 	var vs := get_viewport_rect().size
-	var start := Vector2(vs.x * 0.5, vs.y * 0.42)
+	var centred := 0
+	for pp in _popups:
+		if bool(pp.get("centre", false)):
+			centred += 1
+	var start := Vector2(vs.x * 0.5, vs.y * 0.62 + 44.0 * centred)
 	var cam := get_viewport().get_camera_3d()
+	var is_centre := true
 	if world_pos != Vector3.INF and cam and not cam.is_position_behind(world_pos):
 		start = cam.unproject_position(world_pos)
+		is_centre = false
 	l.position = start - l.get_combined_minimum_size() * 0.5
-	_popups.append({"l": l, "t": 1.6})
+	_popups.append({"l": l, "t": 1.6, "centre": is_centre})
 
 
 func _update_popups(delta: float) -> void:
@@ -594,6 +603,8 @@ func _draw() -> void:
 # ------------------------------------------------------------------ mejoras disponibles
 
 func _update_upgrade_badge(delta: float) -> void:
+	if not GameManager.in_game:
+		return
 	_upgrade_t -= delta
 	if _upgrade_t > 0.0:
 		return
@@ -627,7 +638,10 @@ func check_upgrades() -> void:
 func _on_journal_pressed() -> void:
 	var ui := get_parent() as UIManager
 	if upgrade_available != "" and ui and GameManager.in_game:
-		ui.open_journal("shop")
+		var cat := ""
+		if GameData.UPGRADES.has(upgrade_available):
+			cat = String(GameData.UPGRADES[upgrade_available]["cat"])
+		ui.open_journal("shop", "", cat)
 	else:
 		EventBus.open_menu.emit("journal")
 
@@ -724,6 +738,8 @@ func _update_celebration(_delta: float) -> void:
 	_celeb_box.size = bs
 	_celeb_box.pivot_offset = bs * 0.5
 	var center := Vector2(_safe.get_center().x, _safe.position.y + vs_h() * 0.3)
+	if _toasts.get_child_count() > 0:
+		center.x = minf(center.x, (_safe.position.x + _toasts.position.x) * 0.5 + 40.0)
 	_celeb_box.position = center - bs * 0.5
 	_celebration.focus = center
 

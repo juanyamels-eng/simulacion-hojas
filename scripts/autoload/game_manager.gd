@@ -106,6 +106,7 @@ func reset_managers() -> void:
 func start_playing() -> void:
 	in_game = true
 	skip_menu = false
+	ObjectiveManager.recheck()
 	AudioManager.start_ambience()
 
 

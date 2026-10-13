@@ -197,7 +197,7 @@ func _update_interaction(delta: float) -> void:
 				prompt_hold = it.hold_time(self)
 				# Un objeto que aún no se puede usar (postal tapada, puerta sin requisito...) no debe
 				# impedir cerrar la bolsa cuando se mira al suelo o a un objeto de la finca.
-				if not prompt_available and bags.count > 0 and not bags.is_carrying() and (it is StationObject or cam.pitch < -0.35):
+				if not prompt_available and bags.count > 0 and not bags.is_carrying() and (it is StationObject or it is RecycleBin or cam.pitch < -0.35):
 					target = null
 					prompt = ""
 	if target == null:

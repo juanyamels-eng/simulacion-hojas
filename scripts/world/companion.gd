@@ -415,7 +415,10 @@ func _brain(delta: float, pp: Vector3, dist: float) -> void:
 				_start_follow(false)
 			else:
 				var sp := _sniff_target.global_position
-				_goal = sp + (global_position - sp).normalized() * 0.45
+				# Se sienta al otro lado de la postal: así no tapa el rayo de interacción del jugador.
+				var away := sp - player.global_position
+				away.y = 0.0
+				_goal = sp + (away.normalized() * 0.55 if away.length() > 0.1 else (global_position - sp).normalized() * 0.45)
 				if _flat_dist(_goal) < 0.35:
 					_set_state(SNIFF)
 					AudioManager.play_sfx("dog_sniff", global_position, -6.0, 0.1)
@@ -529,6 +532,9 @@ func _find_hidden_card(pp: Vector3) -> Node3D:
 			continue
 		if so.is_available(player):
 			continue   # ya está a la vista
+		var zid := AreaManager.zone_at(s.global_position)
+		if zid != "" and not AreaManager.is_unlocked(zid):
+			continue
 		var d := Vector2(s.global_position.x - pp.x, s.global_position.z - pp.z).length()
 		if d < best_d and absf(s.global_position.y - pp.y) < 3.0:
 			best_d = d
