@@ -20,6 +20,7 @@ const STAT_NAMES := {
 	"long_throws": "Canastas lejanas",
 	"ducts_repaired": "Conductos reparados",
 	"postcards": "Postales encontradas",
+	"dog_pets": "Caricias a Bellota",
 	"play_time": "Tiempo jugado",
 }
 

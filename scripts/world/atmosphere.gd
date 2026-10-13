@@ -501,6 +501,8 @@ func update_light(day: float) -> void:
 		dust_material.albedo_color = mote.lerp(Color(0.8, 1.0, 0.38), night)
 	if lamp_material:
 		lamp_material.emission_energy_multiplier = 0.2 + 1.5 * night
+	MeshFactory.prop_mat().set_shader_parameter("window_glow", 1.0 + 4.0 * night)
+	MeshFactory.prop_mat().set_shader_parameter("bounce", 0.22 * clampf(sun_e / 1.2, 0.25, 1.0))
 	if bird_material:
 		bird_material.set_shader_parameter("tint", Color(0.2, 0.15, 0.14).lerp(zenith, 0.15).darkened(0.25 * (1.0 - clampf(sun_e, 0.0, 1.0))))
 

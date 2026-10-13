@@ -4,6 +4,7 @@ extends Node
 
 const VERSION := 1
 const AUTOSAVE_INTERVAL := 120.0
+const MIN_SAVE_GAP := 20.0      # agrupa los guardados pedidos por compras/entregas (evita tirones)
 
 var slot := "campaign"
 var _providers := {}          # nombre -> Object con to_save()/from_save(dict)
@@ -44,7 +45,7 @@ func _process(delta: float) -> void:
 	if not enabled or not GameManager.in_game:
 		return
 	_autosave_timer += delta
-	if _autosave_timer >= AUTOSAVE_INTERVAL or _dirty_request:
+	if _autosave_timer >= AUTOSAVE_INTERVAL or (_dirty_request and _autosave_timer >= MIN_SAVE_GAP):
 		_dirty_request = false
 		save_game()
 

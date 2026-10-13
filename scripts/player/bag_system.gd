@@ -9,6 +9,7 @@ var value := 0.0
 var held_leaves := 0
 var held_value := 0.0
 var _full_warned := false
+var _full_hints := 0
 var _held_visual: MeshInstance3D
 
 
@@ -59,7 +60,9 @@ func add(n: int, v: float, source: String) -> void:
 		_full_warned = true
 		AudioManager.play_ui("bag_full")
 		HapticManager.pulse(30, 0.5)
-		EventBus.hint.emit("¡Bolsa llena! Mantén INTERACTUAR para cerrarla.")
+		if _full_hints < 3:
+			_full_hints += 1
+			EventBus.hint.emit("¡Bolsa llena! Mantén INTERACTUAR para cerrarla.")
 
 
 func close_bag() -> void:

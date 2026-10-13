@@ -13,9 +13,9 @@ func _ready() -> void:
 	area.monitoring = true
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(2.4, 1.0, 1.3)
+	bs.size = Vector3(2.4, 2.0, 1.3)
 	cs.shape = bs
-	cs.position = Vector3(0, 1.75, 0)
+	cs.position = Vector3(0, 2.25, 0)
 	area.add_child(cs)
 	add_child(area)
 	area.body_entered.connect(_on_body)

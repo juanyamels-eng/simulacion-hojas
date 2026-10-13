@@ -79,7 +79,7 @@ func process_tool(delta: float, held: bool, pressed: bool) -> void:
 	var continuous := level >= 4
 	var want := pressed or (continuous and held)
 	if want and _cooldown <= 0.0 and not player.bags.is_carrying():
-		_grab(level)
+		_grab(level, pressed)
 	_anim = maxf(_anim - delta * 3.5, 0.0)
 	var a := sin(_anim * PI)
 	model.position = Vector3(0.28, -0.3 - equip_offset(delta) - a * 0.08, -0.5 - a * 0.12)
@@ -87,18 +87,34 @@ func process_tool(delta: float, held: bool, pressed: bool) -> void:
 		f.rotation.x = -a * 1.1
 
 
-func _grab(level: int) -> void:
+func _grab(level: int, fresh: bool = true) -> void:
 	var speed := float(UpgradeManager.get_value("interact_speed"))
-	_cooldown = (0.32 if level < 4 else 0.2) / speed
+	_cooldown = (0.32 if level < 4 else 0.36) / speed
 	var space := player.bags.space()
 	if space <= 0:
 		_cooldown = 0.6
-		AudioManager.play_ui("error", -6.0)
-		EventBus.hint.emit("La bolsa está llena: mantén INTERACTUAR para cerrarla.")
+		if fresh:
+			AudioManager.play_ui("error", -6.0)
+			EventBus.hint.emit("La bolsa está llena: mantén INTERACTUAR para cerrarla.")
 		return
 	var point := _target_point()
-	var radius := 0.95 if level < 5 else 1.7
-	var count := mini(int(UpgradeManager.get_value("hand")), space)
+	var zid := AreaManager.zone_at(point)
+	if zid != "" and not AreaManager.is_unlocked(zid):
+		if fresh:
+			EventBus.hint.emit("Esa zona aún está cerrada: abre su puerta primero.")
+		return
+	# Hojas sueltas: se cogen de una en una en un radio pequeño. En un montón se cogen brazadas,
+	# así que rastrillar primero (y mejorar la mano) compensa de verdad.
+	var radius := 0.6
+	if level >= 5:
+		radius = 1.3
+	elif level >= 2:
+		radius = 0.75
+	var count := int(UpgradeManager.get_value("hand"))
+	if lm.sim.count_in_radius(point, 0.9) >= 14:
+		count *= 4
+		radius *= 1.6
+	count = mini(count, space)
 	var n := lm.sim.capture_nearest(point, radius, count, LeafManager.P_HAND, 3.5)
 	_anim = 1.0
 	_last_count = n
@@ -172,13 +188,15 @@ func _target_point() -> Vector3:
 	var cam := player.cam.camera
 	var origin := cam.global_position
 	var fwd := -cam.global_transform.basis.z
-	var q := PhysicsRayQueryParameters3D.create(origin, origin + fwd * 3.4, Interactable.LAYER_WORLD)
-	q.exclude = [player.get_rid()]
-	var hit := player.get_world_3d().direct_space_state.intersect_ray(q)
-	if not hit.is_empty():
-		var hp: Vector3 = hit["position"]
-		hp.y = lm.sim.height_at(hp.x, hp.z) + lm.pile_height_at(hp.x, hp.z) * 0.5
-		return hp
+	# Se marcha el rayo contra el suelo y los montones (no contra bancos o vallas bajas que haya
+	# delante): lo que ves sobre la hierba es lo que coges.
+	var t := 0.3
+	while t <= 3.6:
+		var q := origin + fwd * t
+		var ground := lm.sim.height_at(q.x, q.z) + lm.pile_height_at(q.x, q.z) * 0.5
+		if q.y <= ground + 0.05:
+			return Vector3(q.x, ground, q.z)
+		t += 0.12
 	var flat := Vector3(fwd.x, 0.0, fwd.z).normalized()
 	var p := player.global_position + flat * 1.6
 	p.y = lm.sim.height_at(p.x, p.z)

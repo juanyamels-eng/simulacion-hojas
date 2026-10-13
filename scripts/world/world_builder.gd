@@ -270,6 +270,10 @@ func collider(center: Vector3, size: Vector3, rot_y: float = 0.0) -> void:
 	cs.position = center
 	cs.rotation.y = rot_y
 	body.add_child(cs)
+	# Todo lo que toca el suelo es sólido para las hojas: así nunca nacen hojas ocultas dentro de
+	# un objeto (contarían para el % de la zona pero serían imposibles de recoger).
+	if center.y - size.y * 0.5 <= gy(center.x, center.z) + 0.35 and size.x < 40.0 and size.z < 40.0:
+		terrain.add_solid_box(Vector2(center.x, center.z), Vector2(size.x, size.z) * 0.5, rot_y)
 
 
 func label(text: String, pos: Vector3, size: int = 64, rot_y: float = 0.0, color: Color = Color(0.98, 0.93, 0.82)) -> Label3D:

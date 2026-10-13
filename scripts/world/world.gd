@@ -47,6 +47,9 @@ func _ready() -> void:
 	builder = WorldBuilder.new()
 	builder.build(self, terrain)
 	_setup_gates()
+	for d in GameData.DUCTS:
+		var dp: Vector2 = d["pos"]
+		terrain.add_solid_box(dp + Vector2(0.3, 0.0), Vector2(1.25, 1.05))
 	leaf_manager = LeafManager.new()
 	add_child(leaf_manager)
 	var saved := PackedByteArray()
@@ -57,6 +60,7 @@ func _ready() -> void:
 	for s in builder.stations:
 		s.leaf_manager = leaf_manager
 	_setup_ducts()
+	_setup_pool_ladders()
 	_setup_postcards()
 	player = PlayerController.new()
 	add_child(player)
@@ -85,6 +89,36 @@ func _ready() -> void:
 	_setup_gameplay_extras()
 	SaveManager.register("world", self)
 	GameManager.requested_new = false
+
+
+## Escaleras para salir de la parte honda de la piscina (además de la rampa del lado oeste).
+func _setup_pool_ladders() -> void:
+	var r := Terrain.POOL
+	var steel := MeshFactory.mat(Color(0.75, 0.78, 0.8), 0.35)
+	for spec in [[Vector2(44.0, r.end.y - 0.45), Vector2(44.0, r.end.y + 1.0), 0.0], [Vector2(44.0, r.position.y + 0.45), Vector2(44.0, r.position.y - 1.0), PI]]:
+		var inside: Vector2 = spec[0]
+		var out: Vector2 = spec[1]
+		var floor_y := terrain.height_at(inside.x, inside.y)
+		var top := terrain.height_at(out.x, out.y)
+		var s := StationObject.new()
+		s.position = Vector3(inside.x, floor_y, inside.y)
+		s.rotation.y = float(spec[2])
+		s.collision_layer = Interactable.LAYER_INTERACT
+		Interactable.make_shape(s, Vector3(1.0, 2.2, 0.6), Vector3(0, 1.1, 0))
+		s.setup(StationObject.Kind.LADDER, {"target": Vector3(out.x, top + 0.1, out.y), "prompt": "Salir de la piscina"})
+		for sx in [-0.3, 0.3]:
+			var rail := MeshInstance3D.new()
+			rail.mesh = MeshFactory.cyl(0.03, 0.03, top - floor_y + 0.9, 8)
+			rail.material_override = steel
+			rail.position = Vector3(sx, (top - floor_y + 0.9) * 0.5, 0.18)
+			s.add_child(rail)
+		for k in int((top - floor_y) / 0.35):
+			var step := MeshInstance3D.new()
+			step.mesh = MeshFactory.box(Vector3(0.6, 0.04, 0.12))
+			step.material_override = steel
+			step.position = Vector3(0, 0.3 + k * 0.35, 0.18)
+			s.add_child(step)
+		add_child(s)
 
 
 ## Punto de enganche para sistemas visuales adicionales (césped, decoración dinámica...).
@@ -291,9 +325,8 @@ func _restore_zone(zid: String, animated: bool) -> void:
 		else:
 			d.visible = false
 	if animated:
-		AudioManager.play_ui("restore")
+		AudioManager.play_ui("restore", -8.0)
 		HapticManager.pulse(120, 0.8)
-		EventBus.toast.emit("¡Zona restaurada!", GameData.zone_by_id(zid)["name"] + " vuelve a lucir como antes.", "reward")
 		if AreaManager.completed_main_count() >= 10:
 			ProgressManager.set_flag("campaign_done")
 

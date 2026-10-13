@@ -51,7 +51,7 @@ func get_prompt(_player: Node) -> String:
 		Kind.NOTE: return "Leer: " + String(data.get("title", "nota"))
 		Kind.POSTCARD: return "Hay algo bajo las hojas…" if _covered else "Recoger postal"
 		Kind.HATCH: return "Hay algo bajo las hojas…" if _covered else "Abrir trampilla"
-		Kind.LADDER: return "Subir al jardín"
+		Kind.LADDER: return String(data.get("prompt", "Subir al jardín"))
 		Kind.ROBOT: return "Brizna (sin batería)" if not ProgressManager.has_flag("robot_found") else "Brizna espera en el taller"
 	return ""
 
@@ -80,7 +80,10 @@ func interact(player: Node) -> void:
 			AudioManager.play_sfx("gate_open", global_position)
 			player.teleport(Vector3(73.0, Terrain.SECRET_FLOOR + 0.2, -30.0), PI)
 		Kind.LADDER:
-			player.teleport(Vector3(8.0, 0.0, -53.5), 0.0)
+			if data.has("target"):
+				player.teleport(data["target"], player.rotation.y)
+			else:
+				player.teleport(Vector3(8.0, 0.0, -53.5), 0.0)
 		Kind.ROBOT:
 			if not ProgressManager.has_flag("robot_found"):
 				ProgressManager.set_flag("robot_found")

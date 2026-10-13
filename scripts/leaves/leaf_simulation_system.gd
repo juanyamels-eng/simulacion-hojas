@@ -51,6 +51,7 @@ var cell_count := PackedInt32Array()
 var zone_counts := PackedInt32Array()
 var zone_initial := PackedInt32Array()
 var zone_values := PackedFloat32Array()
+var zone_allowed := PackedByteArray()     # 1 = zona desbloqueada (se pueden capturar sus hojas)
 
 # Caja de celdas modificadas (para regenerar la textura de montones).
 var dirty := false
@@ -134,6 +135,8 @@ func setup_grid(terrain: Terrain) -> void:
 	zone_initial.resize(nz)
 	zone_initial.fill(0)
 	zone_values.resize(nz)
+	zone_allowed.resize(nz)
+	zone_allowed.fill(1)
 	for i in nz:
 		zone_values[i] = float(GameData.ZONES[i]["value"])
 	cw = int(ceil(float(gw) / CHUNK_CELLS))
@@ -629,7 +632,7 @@ func capture_nearest(center: Vector3, radius: float, max_n: int, point: int, spe
 	for iz in range(r.position.y, r.end.y + 1):
 		for ix in range(r.position.x, r.end.x + 1):
 			var c := iz * gw + ix
-			if cell_count[c] == 0:
+			if cell_count[c] == 0 or (cell_zone[c] > 0 and zone_allowed[cell_zone[c] - 1] == 0):
 				continue
 			var li := cell_head[c]
 			while li >= 0:
@@ -666,7 +669,7 @@ func capture_radius(center: Vector3, radius: float, max_n: int, point: int, spee
 	for iz in range(r.position.y, r.end.y + 1):
 		for ix in range(r.position.x, r.end.x + 1):
 			var c := iz * gw + ix
-			if cell_count[c] == 0:
+			if cell_count[c] == 0 or (cell_zone[c] > 0 and zone_allowed[cell_zone[c] - 1] == 0):
 				continue
 			var li := cell_head[c]
 			while li >= 0:

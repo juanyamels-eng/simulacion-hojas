@@ -79,6 +79,8 @@ func setup(t: Terrain, density_points: Array, saved: PackedByteArray, only_zone:
 	_apply_quality(PerformanceManager.level)
 	PerformanceManager.quality_changed.connect(_apply_quality)
 	SaveManager.register_leaf_provider(self)
+	refresh_allowed_zones()
+	EventBus.zone_unlocked.connect(_on_zone_unlocked)
 	push_counts()
 
 
@@ -254,6 +256,16 @@ func reset_zone(zi: int) -> void:
 			sim.restore_leaf(i, orig_pos[i])
 	cluster.flush(sim)
 	push_counts()
+
+
+func _on_zone_unlocked(_zid: String) -> void:
+	refresh_allowed_zones()
+
+
+## Solo las zonas desbloqueadas permiten capturar hojas (no se recoge por encima de una valla cerrada).
+func refresh_allowed_zones() -> void:
+	for i in GameData.ZONES.size():
+		sim.zone_allowed[i] = 1 if AreaManager.is_unlocked(GameData.ZONES[i]["id"]) else 0
 
 
 func pile_height_at(x: float, z: float) -> float:

@@ -14,7 +14,7 @@ const START_POS := Vector3(0.0, 1.0, 60.0)
 # Zonas: rect = Rect2(x, z, ancho, fondo).
 const ZONES := [
 	{"id": "entrada", "name": "Entrada", "rect": Rect2(-20, 40, 40, 24), "leaves": 2600, "value": 0.6, "color": Color(0.93, 0.62, 0.25)},
-	{"id": "jardin_delantero", "name": "Jardín delantero", "rect": Rect2(-20, 10, 40, 30), "leaves": 3600, "value": 1.0, "color": Color(0.85, 0.45, 0.2)},
+	{"id": "jardin_delantero", "name": "Jardín delantero", "rect": Rect2(-20, 10, 40, 30), "leaves": 3600, "value": 1.4, "color": Color(0.85, 0.45, 0.2)},
 	{"id": "patio_principal", "name": "Patio principal", "rect": Rect2(-20, -25, 40, 35), "leaves": 4200, "value": 3.0, "color": Color(0.8, 0.35, 0.22)},
 	{"id": "garaje", "name": "Garaje", "rect": Rect2(20, 10, 40, 30), "leaves": 3600, "value": 2.0, "color": Color(0.7, 0.5, 0.3)},
 	{"id": "zona_infantil", "name": "Zona infantil", "rect": Rect2(-60, 10, 40, 30), "leaves": 4000, "value": 2.0, "color": Color(0.95, 0.75, 0.3)},
@@ -29,9 +29,9 @@ const ZONES := [
 # Puertas entre zonas. "axis" = dirección de la valla ("x": valla paralela al eje X).
 const GATES := [
 	{"id": "g_delantero", "pos": Vector2(0, 40), "axis": "x", "a": "entrada", "b": "jardin_delantero", "cost": 150, "req": "entrada", "pct": 40.0},
-	{"id": "g_infantil", "pos": Vector2(-20, 25), "axis": "z", "a": "jardin_delantero", "b": "zona_infantil", "cost": 1200, "req": "jardin_delantero", "pct": 50.0},
-	{"id": "g_garaje", "pos": Vector2(20, 25), "axis": "z", "a": "jardin_delantero", "b": "garaje", "cost": 1200, "req": "jardin_delantero", "pct": 50.0},
-	{"id": "g_patio", "pos": Vector2(0, 10), "axis": "x", "a": "jardin_delantero", "b": "patio_principal", "cost": 4000, "req": "jardin_delantero", "pct": 75.0},
+	{"id": "g_infantil", "pos": Vector2(-20, 25), "axis": "z", "a": "jardin_delantero", "b": "zona_infantil", "cost": 700, "req": "jardin_delantero", "pct": 50.0},
+	{"id": "g_garaje", "pos": Vector2(20, 25), "axis": "z", "a": "jardin_delantero", "b": "garaje", "cost": 700, "req": "jardin_delantero", "pct": 50.0},
+	{"id": "g_patio", "pos": Vector2(0, 10), "axis": "x", "a": "jardin_delantero", "b": "patio_principal", "cost": 4000, "req": "jardin_delantero", "pct": 65.0},
 	{"id": "g_huerto", "pos": Vector2(-20, -5), "axis": "z", "a": "patio_principal", "b": "huerto", "cost": 9000, "req": "patio_principal", "pct": 50.0},
 	{"id": "g_piscina", "pos": Vector2(20, -5), "axis": "z", "a": "patio_principal", "b": "piscina", "cost": 9000, "req": "patio_principal", "pct": 50.0},
 	{"id": "g_trasero", "pos": Vector2(16, -25), "axis": "x", "a": "patio_principal", "b": "jardin_trasero", "cost": 18000, "req": "patio_principal", "pct": 75.0},
@@ -47,7 +47,7 @@ const GATES := [
 
 # Recompensas por porcentaje de limpieza (se aplican a cada zona).
 const ZONE_REWARDS := {
-	25: {"type": "money", "mult": 0.08, "text": "Bonificación de limpieza"},
+	25: {"type": "money", "mult": 0.15, "text": "Bonificación de limpieza"},
 	50: {"type": "value", "amount": 0.05, "text": "+5 % valor de las hojas"},
 	75: {"type": "speed", "amount": 0.03, "text": "+3 % velocidad al caminar"},
 	100: {"type": "value", "amount": 0.10, "text": "+10 % valor de las hojas · Zona restaurada"},
@@ -66,9 +66,9 @@ const CATEGORIES := [
 # Mejoras. costs[n] = precio para pasar del nivel n al n+1. values tiene un valor más que costs.
 const UPGRADES := {
 	"hand": {"cat": "hands", "name": "Manos expertas", "desc": "Más hojas por puñado. Nivel 5: mantener para recoger sin parar. Nivel 6: radio doble.",
-		"costs": [25, 120, 400, 900, 2000], "values": [2, 4, 7, 12, 12, 12], "fmt": "hand"},
+		"costs": [25, 120, 350, 700, 1600], "values": [2, 4, 7, 12, 12, 12], "fmt": "hand"},
 	"bag_capacity": {"cat": "bag", "name": "Bolsas grandes", "desc": "Cuántas hojas caben en cada bolsa.",
-		"costs": [80, 400, 1500, 4000, 9000], "values": [50, 100, 250, 500, 750, 1000], "fmt": "%d hojas"},
+		"costs": [80, 300, 1000, 3000, 8000], "values": [50, 100, 250, 500, 750, 1000], "fmt": "%d hojas"},
 	"bag_close": {"cat": "bag", "name": "Nudo rápido", "desc": "Cierra las bolsas en menos tiempo.",
 		"costs": [120, 900, 3500], "values": [1.2, 0.7, 0.35, 0.05], "fmt": "%.1f s"},
 	"bag_throw": {"cat": "bag", "name": "Brazo lanzador", "desc": "Lanza las bolsas más lejos.",
@@ -76,17 +76,17 @@ const UPGRADES := {
 	"bag_carry": {"cat": "bag", "name": "Espalda fuerte", "desc": "Camina más rápido cargando bolsas.",
 		"costs": [150, 1200, 5000], "values": [0.7, 0.82, 0.92, 1.0], "fmt": "pct"},
 	"leaf_value": {"cat": "bag", "name": "Compost premium", "desc": "Multiplica el dinero que recibes por cada hoja.",
-		"costs": [600, 2500, 9000, 30000, 90000], "values": [1.0, 1.15, 1.25, 1.5, 2.0, 3.0], "fmt": "x%.2f"},
+		"costs": [350, 1800, 7000, 25000, 80000], "values": [1.0, 1.15, 1.25, 1.5, 2.0, 3.0], "fmt": "x%.2f"},
 	"tool_rake": {"cat": "rake", "name": "Rastrillo", "desc": "Arrastra muchas hojas a la vez y crea montones.",
 		"costs": [250], "values": [0, 1], "fmt": "tool"},
 	"rake_width": {"cat": "rake", "name": "Cabezal ancho", "desc": "Zona de barrido más ancha.", "requires": "tool_rake",
-		"costs": [300, 900, 2500, 7000], "values": [1.1, 1.5, 2.0, 2.6, 3.4], "fmt": "%.1f m"},
+		"costs": [300, 900, 2500, 7000], "values": [1.8, 2.4, 3.0, 3.6, 4.2], "fmt": "%.1f m"},
 	"rake_capacity": {"cat": "rake", "name": "Púas resistentes", "desc": "Cuántas hojas puede arrastrar a la vez.", "requires": "tool_rake",
 		"costs": [400, 1200, 3500, 9000], "values": [60, 140, 300, 600, 1100], "fmt": "%d hojas"},
 	"rake_speed": {"cat": "rake", "name": "Barrido ágil", "desc": "Barre y camina más rápido con el rastrillo.", "requires": "tool_rake",
 		"costs": [250, 1500, 5000], "values": [1.0, 1.15, 1.3, 1.5], "fmt": "x%.2f"},
 	"rake_grip": {"cat": "rake", "name": "Adherencia", "desc": "Menos hojas se escapan entre las púas.", "requires": "tool_rake",
-		"costs": [350, 1800, 6000], "values": [0.7, 0.8, 0.9, 0.97], "fmt": "pct"},
+		"costs": [350, 1800, 6000], "values": [0.88, 0.93, 0.97, 1.0], "fmt": "pct"},
 	"rake_reach": {"cat": "rake", "name": "Mango largo", "desc": "Alcance del rastrillo.", "requires": "tool_rake",
 		"costs": [300, 1400, 4500], "values": [1.6, 1.9, 2.2, 2.6], "fmt": "%.1f m"},
 	"tool_blower": {"cat": "blower", "name": "Soplador", "desc": "Un cono de aire que levanta y arrastra hojas.", "requires_zone": "jardin_delantero",
@@ -233,6 +233,7 @@ const OBJECTIVES := [
 	{"id": "o_bags_5", "name": "Entrega 5 bolsas", "stat": "bags_delivered", "target": 5, "reward": 120},
 	{"id": "o_collect_1k", "name": "Recoge 1.000 hojas", "stat": "leaves_collected", "target": 1000, "reward": 250},
 	{"id": "o_buy_5", "name": "Compra 5 mejoras", "stat": "upgrades_bought", "target": 5, "reward": 200},
+	{"id": "o_pile_150", "name": "Rastrilla un montón de 150 hojas", "stat": "max_pile", "target": 150, "reward": 250},
 	{"id": "o_pile_500", "name": "Crea un montón de 500 hojas", "stat": "max_pile", "target": 500, "reward": 600},
 	{"id": "o_long_throw", "name": "Lanza una bolsa al contenedor desde lejos", "stat": "long_throws", "target": 1, "reward": 400},
 	{"id": "o_zone_100", "name": "Completa una zona al 100 %", "stat": "zones_completed", "target": 1, "reward": 500},

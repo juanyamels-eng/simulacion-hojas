@@ -555,7 +555,7 @@ func _update_radar(delta: float, p: PlayerController) -> void:
 	if z == "":
 		return
 	var rem := int(AreaManager.remaining.get(z, 0))
-	if rem > 0 and rem <= 15:
+	if rem > 0 and rem <= 40:
 		_radar = p.leaf_manager.sim.remaining_in_zone(GameData.zone_index(z), 15)
 
 
@@ -738,6 +738,14 @@ func _tutorial(delta: float, p: PlayerController) -> void:
 		return
 	_tut_t = 0.5
 	var step := ProgressManager.tutorial_step
+	# Si el jugador ya hace lo que pide un paso anterior, se avanza sin repetir la instrucción.
+	if step <= 2 and ProgressManager.get_stat("leaves_collected") >= 10:
+		step = 3
+	if step <= 4 and (p.bags.is_carrying() or ProgressManager.get_stat("bags_used") > 0):
+		step = maxi(step, 5)
+	if step <= 5 and ProgressManager.get_stat("bags_delivered") >= 1:
+		step = 6
+	ProgressManager.tutorial_step = step
 	if _tut_start == Vector3.INF:
 		_tut_start = p.global_position
 		_tut_yaw = p.rotation.y
