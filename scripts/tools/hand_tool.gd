@@ -1,36 +1,69 @@
 class_name HandTool
 extends BaseTool
 ## Manos: recogen un puñado de hojas, que vuelan hasta la mano y entran en la bolsa.
+## Cada puñado levanta un pequeño estallido de trocitos de hoja en el punto de agarre.
 
 const GLOVE := Color(0.93, 0.62, 0.22)
+const GLOVE_DARK := Color(0.76, 0.45, 0.15)
+const CUFF := Color(0.33, 0.55, 0.36)
+const CUFF_DARK := Color(0.22, 0.4, 0.26)
+const SLEEVE := Color(0.5, 0.25, 0.2)
+const SLEEVE_LIGHT := Color(0.62, 0.34, 0.26)
 
 var _cooldown := 0.0
 var _anim := 0.0
 var _fingers: Array[Node3D] = []
 var _last_count := 0
+var _bursts: Array[CPUParticles3D] = []
+var _burst_next := 0
+var bursts_emitted := 0
 
 
 func _init() -> void:
 	tool_id = "hand"
 
 
+## Guante de jardinería redondeado con puño elástico y manga de punto (6 mallas, 1 material).
 func build_model() -> void:
 	add_child(model)
 	model.position = Vector3(0.28, -0.3, -0.5)
 	model.rotation = Vector3(-0.35, 0.2, 0.0)
-	part(MeshFactory.box(Vector3(0.11, 0.035, 0.12)), GLOVE, Vector3.ZERO)
-	part(MeshFactory.cyl(0.045, 0.05, 0.12, 8), Color(0.35, 0.25, 0.2), Vector3(0, 0, 0.1)).rotation.x = PI * 0.5
+	var m := Companion.vertex_color_material()
+	var down := Vector3(PI * 0.5, 0, 0)
+	_mesh(model, Companion.merge_parts([
+		[MeshFactory.sphere(0.064, 14, 8), Companion.part_xf(Vector3(0, 0, -0.008), Vector3(1.0, 0.46, 1.08)), GLOVE],
+		[MeshFactory.sphere(0.034, 10, 6), Companion.part_xf(Vector3(0, 0.02, -0.03), Vector3(1.55, 0.45, 0.9)), GLOVE_DARK],
+		[MeshFactory.cyl(0.05, 0.055, 0.05, 14), Companion.part_xf(Vector3(0, -0.002, 0.062), Vector3(1, 1, 0.66), down), CUFF],
+		[MeshFactory.cyl(0.057, 0.057, 0.013, 14), Companion.part_xf(Vector3(0, -0.002, 0.084), Vector3(1, 1, 0.66), down), CUFF_DARK],
+		[MeshFactory.cyl(0.06, 0.06, 0.034, 14), Companion.part_xf(Vector3(0, 0.0, 0.108), Vector3(1, 1, 0.8), down), SLEEVE_LIGHT],
+		[MeshFactory.cyl(0.053, 0.056, 0.09, 14), Companion.part_xf(Vector3(0, 0.0, 0.168), Vector3(1, 1, 0.8), down), SLEEVE],
+	]), m)
+	var finger := Companion.merge_parts([
+		[MeshFactory.cyl(0.0125, 0.0145, 0.05, 8), Companion.part_xf(Vector3(0, 0, -0.025), Vector3.ONE, down), GLOVE],
+		[MeshFactory.sphere(0.0128, 8, 5), Companion.part_xf(Vector3(0, 0, -0.05), Vector3.ONE), GLOVE],
+	])
+	var lengths := [0.92, 1.05, 1.0, 0.8]
 	for k in 4:
 		var f := Node3D.new()
-		f.position = Vector3(-0.04 + k * 0.027, 0.0, -0.06)
+		f.position = Vector3(-0.037 + k * 0.025, 0.004, -0.058 + absf(k - 1.5) * 0.006)
+		f.scale = Vector3(1, 1, float(lengths[k]))
 		model.add_child(f)
-		part(MeshFactory.box(Vector3(0.022, 0.025, 0.07)), GLOVE, Vector3(0, 0, -0.035), f)
+		_mesh(f, finger, m)
 		_fingers.append(f)
 	var thumb := Node3D.new()
-	thumb.position = Vector3(-0.06, 0.0, -0.01)
-	thumb.rotation.y = 0.8
+	thumb.position = Vector3(-0.056, -0.004, -0.008)
+	thumb.rotation = Vector3(0.0, 0.85, 0.25)
+	thumb.scale = Vector3(1.15, 1.1, 0.95)
 	model.add_child(thumb)
-	part(MeshFactory.box(Vector3(0.024, 0.025, 0.06)), GLOVE, Vector3(0, 0, -0.03), thumb)
+	_mesh(thumb, finger, m)
+
+
+func _mesh(parent: Node3D, mesh: Mesh, m: Material) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
 
 
 func process_tool(delta: float, held: bool, pressed: bool) -> void:
@@ -73,8 +106,65 @@ func _grab(level: int) -> void:
 		AudioManager.play_sfx("grab", Vector3.INF, -4.0 + minf(n, 12) * 0.3, 0.15, 3)
 		HapticManager.tick(0.2 + n * 0.02)
 		ProgressManager.mark_tool_used("hand")
+		_burst(point, n)
 	else:
 		AudioManager.play_sfx("swish", Vector3.INF, -16.0, 0.2)
+
+
+## Estallido de trocitos de hoja (2 emisores alternos para no cortar el anterior).
+func _burst(point: Vector3, n: int) -> void:
+	if _bursts.is_empty():
+		for k in 2:
+			var b := _make_burst()
+			lm.add_child(b)
+			_bursts.append(b)
+	var b := _bursts[_burst_next]
+	_burst_next = (_burst_next + 1) % _bursts.size()
+	b.global_position = point + Vector3(0, 0.05, 0)
+	b.scale_amount_max = 0.8 + minf(n, 12) * 0.04
+	b.restart()
+	bursts_emitted += 1
+
+
+static func _make_burst() -> CPUParticles3D:
+	var b := CPUParticles3D.new()
+	b.emitting = false
+	b.one_shot = true
+	b.amount = maxi(int(14 * float(PerformanceManager.preset()["particles"])), 5)
+	b.lifetime = 0.75
+	b.explosiveness = 0.92
+	b.local_coords = false
+	b.mesh = MeshFactory.leaf_mesh_lod()
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.roughness = 0.9
+	b.material_override = m
+	b.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	b.emission_sphere_radius = 0.25
+	b.direction = Vector3.UP
+	b.spread = 55.0
+	b.gravity = Vector3(0, -6.5, 0)
+	b.initial_velocity_min = 1.3
+	b.initial_velocity_max = 2.8
+	b.angular_velocity_min = -540.0
+	b.angular_velocity_max = 540.0
+	b.damping_min = 1.0
+	b.damping_max = 2.0
+	b.scale_amount_min = 0.55
+	b.scale_amount_max = 1.0
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 1.0))
+	curve.add_point(Vector2(0.7, 0.9))
+	curve.add_point(Vector2(1.0, 0.0))
+	b.scale_amount_curve = curve
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.97, 0.74, 0.2))
+	grad.set_color(1, Color(0.82, 0.28, 0.1))
+	grad.add_point(0.5, Color(0.95, 0.5, 0.14))
+	b.color_initial_ramp = grad
+	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return b
 
 
 ## Punto del suelo al que mira el jugador (máx. ~3 m), o cerca de los pies si mira al horizonte.
