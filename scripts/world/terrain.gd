@@ -7,6 +7,7 @@ const CHUNK := 10.0
 const POOL := Rect2(31, -14, 18, 13)          # piscina vacía (x, z, ancho, fondo)
 const SECRET := Rect2(68, -46, 26, 22)        # taller subterráneo
 const SECRET_FLOOR := -20.0
+const OUTER_Y := -1.0                         # campo exterior, por debajo de cualquier punto de la finca
 
 var gw := 0
 var gh := 0
@@ -219,7 +220,7 @@ func build(pile_tex: Texture2D, noise_tex: Texture2D) -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(520, 520)
 	outer.mesh = pm
-	outer.position = Vector3(0, -0.06, 0)
+	outer.position = Vector3(0, OUTER_Y, 0)
 	var om := StandardMaterial3D.new()
 	om.albedo_color = Color(0.43, 0.5, 0.24)
 	om.roughness = 1.0

@@ -108,30 +108,30 @@ func _build() -> void:
 	_bottom = _panel(16)
 	add_child(_bottom)
 	var bv := VBoxContainer.new()
-	bv.add_theme_constant_override("separation", 2)
+	bv.add_theme_constant_override("separation", 0)
 	_bottom.add_child(bv)
-	var trow := HBoxContainer.new()
-	bv.add_child(trow)
-	_tool_name = UITheme.label("Manos", 22, UITheme.INK)
-	trow.add_child(_tool_name)
-	_tool_status = UITheme.label("", 17, UITheme.INK_SOFT)
-	trow.add_child(_tool_status)
 	var brow := HBoxContainer.new()
 	bv.add_child(brow)
+	_tool_name = UITheme.label("Manos", 22, UITheme.INK)
+	brow.add_child(_tool_name)
+	_tool_status = UITheme.label("", 17, UITheme.INK_SOFT)
+	_tool_status.visible = false
+	brow.add_child(_tool_status)
 	var bag_icon := IconView.new()
 	bag_icon.icon = "bag"
 	bag_icon.color = Color(0.2, 0.42, 0.24)
 	bag_icon.custom_minimum_size = Vector2(30, 30)
 	brow.add_child(bag_icon)
 	_bag_bar = ProgressBar.new()
-	_bag_bar.custom_minimum_size = Vector2(240, 22)
+	_bag_bar.custom_minimum_size = Vector2(200, 20)
 	_bag_bar.show_percentage = false
 	_bag_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	brow.add_child(_bag_bar)
 	_bag_label = UITheme.label("0 / 50", 20, UITheme.INK)
 	brow.add_child(_bag_label)
-	_carry = UITheme.label("", 18, UITheme.ACCENT_DARK)
+	_carry = UITheme.label("", 17, UITheme.ACCENT_DARK)
 	bv.add_child(_carry)
+	_bottom.add_theme_stylebox_override("panel", UITheme.box(Color(UITheme.PAPER, 0.85), 14, UITheme.WOOD, 3, 10, true))
 
 	_prompt = UITheme.outlined("", 22)
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -192,8 +192,9 @@ func _process(delta: float) -> void:
 	_bottom.position = Vector2(_safe.get_center().x - bsize.x * 0.5, _safe.end.y - bsize.y)
 	if p.bags.is_carrying():
 		_carry.text = "Llevas una bolsa de %d hojas: lánzala o llévala al contenedor" % p.bags.held_leaves
+		_carry.visible = true
 	else:
-		_carry.text = ""
+		_carry.visible = false
 	# Texto de interacción encima del botón.
 	var ib := touch._btn("interact")
 	_prompt.text = p.prompt
@@ -216,6 +217,10 @@ func _process(delta: float) -> void:
 		var bs := _banner.get_combined_minimum_size()
 		_banner.size = bs
 		_banner.position = Vector2(_safe.get_center().x - bs.x * 0.5, _safe.position.y + vs_h() * 0.2)
+	if GameManager.is_time_attack() and p.get_parent().has_method("time_attack_seconds"):
+		var secs: float = p.get_parent().time_attack_seconds()
+		_banner.text = "%d:%02d" % [int(secs) / 60, int(secs) % 60]
+		_banner_t = 1.3
 	_fps.visible = SettingsManager.get_value("show_fps", false)
 	if _fps.visible:
 		_fps.text = "%d FPS · %s · %d hojas activas" % [Engine.get_frames_per_second(), PerformanceManager.preset()["name"], p.leaf_manager.sim.active_n]

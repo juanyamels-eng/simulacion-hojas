@@ -17,6 +17,7 @@ var falling: CPUParticles3D
 var rain: CPUParticles3D
 var gates := {}
 var ducts: Array[SuctionDuct] = []
+var robot: RobotSweeper
 var menu_mode := false
 var day_t := 0.12
 var _menu_t := 0.0
@@ -67,6 +68,9 @@ func _ready() -> void:
 		player.apply_state(GameManager.player_state)
 	else:
 		player.teleport(GameData.START_POS, 0.0)
+	robot = RobotSweeper.new()
+	add_child(robot)
+	robot.setup(leaf_manager, player)
 	_zone_clean.resize(12)
 	for zid in AreaManager.completed:
 		_restore_zone(zid, false)

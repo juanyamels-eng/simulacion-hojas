@@ -51,8 +51,8 @@ func _ready() -> void:
 	UpgradeManager.levels["rake_width"] = 3
 	UpgradeManager.levels["rake_capacity"] = 4
 	p.tools.select("rake")
-	p.teleport(Vector3(-15, 0.3, 61), 0.0)
-	p.cam.pitch = -0.35
+	p.teleport(Vector3(6.5, 0.3, 50.5), PI * 0.5)
+	p.cam.pitch = -0.5
 	InputState.action_held = true
 	InputState.move = Vector2(0, 1)
 	await frames(200)
@@ -60,8 +60,8 @@ func _ready() -> void:
 	await frames(40)
 	await shot("04_rastrillo")
 	InputState.action_held = false
-	p.teleport(p.global_position + Vector3(2.5, 0, 1.5), 0.9)
-	p.cam.pitch = -0.4
+	p.teleport(p.global_position + Vector3(-2.0, 0, 3.5), 2.4)
+	p.cam.pitch = -0.35
 	await frames(30)
 	await shot("05_monton")
 	# Soplador.

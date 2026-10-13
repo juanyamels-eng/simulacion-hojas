@@ -125,7 +125,7 @@ func label(text: String, pos: Vector3, size: int = 64, rot_y: float = 0.0, color
 func tree(x: float, z: float, scale: float = 1.0, kind: int = -1, collide: bool = true) -> void:
 	if kind < 0:
 		kind = 0 if rng.randf() < 0.65 else (1 if rng.randf() < 0.6 else 2)
-	var y := gy(x, z)
+	var y := gy(x, z) if collide else Terrain.OUTER_Y
 	var s := scale * rng.randf_range(0.85, 1.15)
 	if kind == 2:
 		add("trunk", C_TRUNK, Vector3(x, y + 1.0 * s, z), Vector3(0.35, 2.0, 0.35) * s)
@@ -882,13 +882,14 @@ func _zone_secret() -> void:
 
 func _outside() -> void:
 	# Carretera, casas vecinas y bosque alrededor de la finca.
-	add("box", Color(0.3, 0.3, 0.32), Vector3(0, -0.02, 73), Vector3(260, 0.05, 7), 0.0, false)
+	var oy := Terrain.OUTER_Y
+	add("box", Color(0.3, 0.3, 0.32), Vector3(0, oy + 0.02, 73), Vector3(260, 0.05, 7), 0.0, false)
 	for k in 16:
-		add("box", Color(0.95, 0.9, 0.7), Vector3(-120 + k * 16.0, 0.02, 73), Vector3(5.0, 0.03, 0.2), 0.0, false)
+		add("box", Color(0.95, 0.9, 0.7), Vector3(-120 + k * 16.0, oy + 0.05, 73), Vector3(5.0, 0.03, 0.2), 0.0, false)
 	for hx in [-45.0, -10.0, 30.0, 65.0]:
 		var hcol := Color(0.85, 0.78, 0.65) if rng.randf() < 0.5 else Color(0.75, 0.6, 0.52)
-		add("box", hcol, Vector3(hx, 3.0, 92), Vector3(10, 6, 8))
-		add_basis("prism", Color(0.45, 0.25, 0.2), Vector3(hx, 7.5, 92), Basis(Vector3.UP, PI * 0.5) * Basis.from_scale(Vector3(9, 3, 11)))
+		add("box", hcol, Vector3(hx, oy + 3.0, 92), Vector3(10, 6, 8))
+		add_basis("prism", Color(0.45, 0.25, 0.2), Vector3(hx, oy + 7.5, 92), Basis(Vector3.UP, PI * 0.5) * Basis.from_scale(Vector3(9, 3, 11)))
 	var bounds := Rect2(-62, -64, 124, 130)
 	var x := -105.0
 	while x <= 105.0:

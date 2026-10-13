@@ -33,13 +33,20 @@ func _ready() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	get_tree().root.add_child.call_deferred(main)
 	await frames(5)
+	var guard := 0
 	while GameManager.world == null or not GameManager.in_game:
 		await frames(1)
+		guard += 1
+		if guard > 1800:
+			print("  FAIL el mundo no llegó a cargarse")
+			get_tree().quit(1)
+			return
 	print("Mundo construido en %d ms" % (Time.get_ticks_msec() - t0))
 	var world: World = GameManager.world
 	var p: PlayerController = world.player
 	var sim: LeafSimulationSystem = world.leaf_manager.sim
 	ok(sim.n > 30000, "hojas generadas: %d" % sim.n)
+	ok(world.robot != null and not world.robot.visible, "robot Brizna creado (inactivo hasta repararlo)")
 	ok(AreaManager.initial.get("entrada", 0) > 2400, "hojas en Entrada: %s" % AreaManager.initial.get("entrada", 0))
 	ok(AreaManager.pct("entrada") == 0.0, "Entrada empieza al 0 %")
 	ok(p.is_on_floor() or true, "jugador creado")
@@ -182,8 +189,14 @@ func _ready() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	get_tree().root.add_child(main)
 	await frames(5)
+	guard = 0
 	while GameManager.world == null or not GameManager.in_game or GameManager.world == world:
 		await frames(1)
+		guard += 1
+		if guard > 1800:
+			print("  FAIL la partida no se recargó")
+			get_tree().quit(1)
+			return
 	world = GameManager.world
 	sim = world.leaf_manager.sim
 	ok(absf(EconomyManager.money - money_saved) < 1.0, "dinero recuperado (%.0f)" % EconomyManager.money)

@@ -186,6 +186,10 @@ func _do_reset_zone(pause_modal: Modal, z: String) -> void:
 func return_to_menu() -> void:
 	SaveManager.save_game()
 	GameManager.in_game = false
+	GameManager.mode = "campaign"
+	GameManager.time_attack_zone = ""
+	SaveManager.slot = "campaign"
+	GameManager.requested_new = not SaveManager.has_save("campaign")
 	GameManager.skip_menu = false
 	get_tree().paused = false
 	get_tree().reload_current_scene()
