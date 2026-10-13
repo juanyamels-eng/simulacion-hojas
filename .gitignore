@@ -19,3 +19,6 @@ keys/release.properties
 .DS_Store
 Thumbs.db
 __pycache__/
+
+# Copias de trabajo temporales de agentes
+.claude/worktrees/
