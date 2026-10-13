@@ -27,12 +27,60 @@ func attach_parent() -> Node3D:
 
 func build_model() -> void:
 	add_child(model)
-	var wood := Color(0.62, 0.42, 0.24)
-	_handle = part(MeshFactory.cyl(0.022, 0.022, 1.0, 6), wood, Vector3.ZERO)
+	_handle = _vis(MeshFactory.prefab("rake_handle", _handle_parts), model)
 	_head = Node3D.new()
 	model.add_child(_head)
-	_bar = part(MeshFactory.box(Vector3(1.0, 0.05, 0.05)), Color(0.35, 0.36, 0.38), Vector3(0, 0.05, 0), _head, 0.5)
+	_bar = _vis(MeshFactory.prefab("rake_bar", _bar_parts), _head)
+	_bar.position = Vector3(0, 0.05, 0)
 	_rebuild_tines()
+
+
+## Pieza visual con el material estilizado (color por vértice, patrones en espacio de objeto).
+func _vis(mesh: Mesh, parent: Node3D) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = MeshFactory.prop_mat(true)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
+
+
+## Mango (eje Y local, de las manos en -Y al cabezal en +Y): madera, empuñadura, tapón y virola.
+func _handle_parts() -> Array:
+	return [
+		MeshFactory.part("cyl6", Vector3.ZERO, Vector3(0.044, 1.0, 0.044), MeshFactory.pc(Color(0.66, 0.45, 0.26), MeshFactory.PAT_WOOD, true)),
+		MeshFactory.part("cyl6", Vector3(0, -0.36, 0), Vector3(0.054, 0.2, 0.054), MeshFactory.pc(Color(0.2, 0.42, 0.3), MeshFactory.PAT_PLAIN)),
+		MeshFactory.part("cyl6", Vector3(0, -0.5, 0), Vector3(0.058, 0.03, 0.058), MeshFactory.pc(Color(0.15, 0.15, 0.15), MeshFactory.PAT_PLAIN)),
+		MeshFactory.part("cyl6", Vector3(0, 0.46, 0), Vector3(0.052, 0.08, 0.052), MeshFactory.pc(Color(0.62, 0.63, 0.66), MeshFactory.PAT_METAL)),
+	]
+
+
+## Barra del cabezal (1 m, se escala con el ancho): perfil metálico con canto superior.
+func _bar_parts() -> Array:
+	return [
+		MeshFactory.part("box", Vector3.ZERO, Vector3(1.0, 0.045, 0.05), MeshFactory.pc(Color(0.33, 0.34, 0.37), MeshFactory.PAT_METAL)),
+		MeshFactory.part("box", Vector3(0, 0.026, 0.004), Vector3(1.0, 0.012, 0.058), MeshFactory.pc(Color(0.5, 0.52, 0.55), MeshFactory.PAT_METAL)),
+	]
+
+
+## Púas curvadas y tirantes del cabezal para un ancho dado, fusionados en una sola malla.
+func _tine_parts(width: float, copper: bool) -> Array:
+	var col := Color(0.85, 0.5, 0.25) if copper else Color(0.5, 0.52, 0.55)
+	var pcol := MeshFactory.pc(col, MeshFactory.PAT_METAL)
+	var p := []
+	var n := int(width / 0.09)
+	for k in n + 1:
+		var x := -width * 0.5 + k * width / n
+		p.append(MeshFactory.part("box", Vector3(x, -0.005, 0.03), Vector3(0.016, 0.11, 0.016), pcol, Basis(Vector3.RIGHT, 0.35)))
+		p.append(MeshFactory.part("box", Vector3(x, -0.06, 0.06), Vector3(0.015, 0.05, 0.015), pcol, Basis(Vector3.RIGHT, 0.95)))
+	for sx in [-1.0, 1.0]:
+		var a := Vector3(sx * width * 0.45, 0.05, 0.0)
+		var b := Vector3(0, 0.16, -0.02)
+		var d := b - a
+		var mid := (a + b) * 0.5
+		p.append(MeshFactory.part("box", mid, Vector3(d.length(), 0.014, 0.014), MeshFactory.pc(Color(0.33, 0.34, 0.37), MeshFactory.PAT_METAL), Basis(Vector3.BACK, atan2(d.y, d.x))))
+	p.append(MeshFactory.part("cyl6", Vector3(0, 0.12, 0), Vector3(0.05, 0.12, 0.05), MeshFactory.pc(Color(0.33, 0.34, 0.37), MeshFactory.PAT_METAL)))
+	return p
 
 
 func _rebuild_tines() -> void:
@@ -45,12 +93,8 @@ func _rebuild_tines() -> void:
 	_tines.clear()
 	_bar.scale.x = width
 	var copper := ProgressManager.has_flag("copper_rake")
-	var col := Color(0.85, 0.5, 0.25) if copper else Color(0.45, 0.46, 0.48)
-	var n := int(width / 0.09)
-	for k in n + 1:
-		var t := part(MeshFactory.box(Vector3(0.018, 0.12, 0.018)), col, Vector3(-width * 0.5 + k * width / n, 0.0, 0.02), _head, 0.5)
-		t.rotation.x = 0.35
-		_tines.append(t)
+	var id := "rake_tines_%d_%d" % [int(round(width * 100.0)), int(copper)]
+	_tines.append(_vis(MeshFactory.prefab(id, _tine_parts.bind(width, copper)), _head))
 
 
 func equip() -> void:

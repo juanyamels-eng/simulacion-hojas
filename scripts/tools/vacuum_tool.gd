@@ -19,10 +19,10 @@ func attach_parent() -> Node3D:
 
 func build_model() -> void:
 	add_child(model)
-	var body_col := Color(0.25, 0.5, 0.6)
-	part(MeshFactory.box(Vector3(0.22, 0.26, 0.32)), body_col, Vector3(0.3, 1.0, -0.15))
-	_tube = part(MeshFactory.cyl(0.06, 0.06, 1.0, 10), Color(0.2, 0.22, 0.24), Vector3.ZERO)
-	_mouth = part(MeshFactory.cyl(0.16, 0.1, 0.18, 12), body_col.darkened(0.2), Vector3.ZERO)
+	var body := _vis(MeshFactory.prefab("vacuum_body", _body_parts), model)
+	body.position = Vector3(0.3, 1.0, -0.15)
+	_tube = _vis(MeshFactory.prefab("vacuum_hose", _hose_parts), model)
+	_mouth = _vis(MeshFactory.prefab("vacuum_mouth", _mouth_parts), model)
 	_swirl = CPUParticles3D.new()
 	_swirl.amount = 20
 	_swirl.lifetime = 0.5
@@ -38,6 +38,58 @@ func build_model() -> void:
 	_swirl.angular_velocity_max = 500.0
 	_swirl.emitting = false
 	_mouth.add_child(_swirl)
+
+
+func _vis(mesh: Mesh, parent: Node3D) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = MeshFactory.prop_mat(true)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
+
+
+## Depósito a la cadera: bidón brillante con motor, asa, bandas, toma de la manguera y saco de hojas.
+func _body_parts() -> Array:
+	var teal := MeshFactory.pc(Color(0.22, 0.5, 0.6), MeshFactory.PAT_METAL)
+	var dark := MeshFactory.pc(Color(0.12, 0.13, 0.15), MeshFactory.PAT_PLAIN)
+	var grey := MeshFactory.pc(Color(0.4, 0.42, 0.45), MeshFactory.PAT_METAL)
+	var p := []
+	p.append(MeshFactory.part("cyl", Vector3.ZERO, Vector3(0.26, 0.3, 0.26), teal))
+	p.append(MeshFactory.part("sph", Vector3(0, 0.15, 0), Vector3(0.26, 0.12, 0.26), teal))
+	for y in [-0.1, 0.08]:
+		p.append(MeshFactory.part("cyl", Vector3(0, y, 0), Vector3(0.272, 0.025, 0.272), dark))
+	p.append(MeshFactory.part("cyl", Vector3(0, 0.22, 0), Vector3(0.12, 0.05, 0.12), grey))
+	p.append(MeshFactory.part("box", Vector3(0, 0.27, 0), Vector3(0.03, 0.03, 0.18), dark))
+	for z in [-0.08, 0.08]:
+		p.append(MeshFactory.part("box", Vector3(0, 0.245, z), Vector3(0.025, 0.05, 0.025), dark))
+	p.append(MeshFactory.part("cyl", Vector3(0, -0.1, -0.15), Vector3(0.1, 0.08, 0.1), grey, Basis(Vector3.RIGHT, PI * 0.5)))
+	p.append(MeshFactory.part("sph_lo", Vector3(0.02, -0.16, 0.17), Vector3(0.26, 0.3, 0.2), MeshFactory.pc(Color(0.45, 0.5, 0.36), MeshFactory.PAT_STRAW)))
+	p.append(MeshFactory.part("box", Vector3(0.0, 0.0, 0.0), Vector3(0.3, 0.035, 0.035), dark, Basis(Vector3.BACK, 0.9)))
+	p.append(MeshFactory.part("box", Vector3(0.135, 0.02, 0), Vector3(0.004, 0.05, 0.12), MeshFactory.pc(Color(0.95, 0.92, 0.84), MeshFactory.PAT_PLAIN)))
+	return p
+
+
+## Manguera corrugada (1 m en Y; se estira con la distancia): tubo y anillos.
+func _hose_parts() -> Array:
+	var p := []
+	p.append(MeshFactory.part("cyl", Vector3.ZERO, Vector3(0.11, 1.0, 0.11), MeshFactory.pc(Color(0.2, 0.22, 0.24), MeshFactory.PAT_PLAIN)))
+	for k in 10:
+		p.append(MeshFactory.part("cyl", Vector3(0, -0.45 + k * 0.1, 0), Vector3(0.128, 0.03, 0.128), MeshFactory.pc(Color(0.13, 0.14, 0.16), MeshFactory.PAT_METAL)))
+	return p
+
+
+## Boquilla: cono ancho hacia el suelo (-Y), parachoques de goma y asidero.
+func _mouth_parts() -> Array:
+	var teal := MeshFactory.pc(Color(0.17, 0.4, 0.48), MeshFactory.PAT_METAL)
+	var dark := MeshFactory.pc(Color(0.1, 0.1, 0.11), MeshFactory.PAT_PLAIN)
+	var p := []
+	p.append([MeshFactory.cyl(0.07, 0.17, 0.22, 14), Transform3D.IDENTITY, teal])
+	p.append(MeshFactory.part("ring", Vector3(0, -0.11, 0), Vector3(0.46, 0.3, 0.46), dark))
+	p.append(MeshFactory.part("cyl", Vector3(0, 0.13, 0), Vector3(0.15, 0.05, 0.15), dark))
+	p.append(MeshFactory.part("box", Vector3(0.12, 0.05, 0), Vector3(0.03, 0.14, 0.03), dark, Basis(Vector3.BACK, -0.5)))
+	p.append(MeshFactory.part("box", Vector3(0, -0.02, 0.16), Vector3(0.1, 0.02, 0.02), MeshFactory.pc(Color(0.95, 0.7, 0.15), MeshFactory.PAT_PLAIN)))
+	return p
 
 
 func _mouth_local() -> Vector3:
@@ -87,7 +139,7 @@ func process_tool(delta: float, held: bool, _pressed: bool) -> void:
 	_tube.position = (hip + ml) * 0.5
 	_tube.basis = Basis.looking_at(dir.normalized(), Vector3.UP) * Basis(Vector3.RIGHT, -PI * 0.5)
 	_tube.scale = Vector3(1.0, dir.length(), 1.0)
-	_mouth.basis = _tube.basis
+	_mouth.basis = _tube.basis.orthonormalized()
 	if on:
 		player.cam.add_shake(0.05)
 

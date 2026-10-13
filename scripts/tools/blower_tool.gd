@@ -21,12 +21,11 @@ func _init() -> void:
 func build_model() -> void:
 	add_child(model)
 	model.position = Vector3(0.3, -0.32, -0.45)
-	var orange := Color(0.92, 0.48, 0.15)
-	part(MeshFactory.box(Vector3(0.16, 0.18, 0.3)), orange, Vector3(0, 0, 0.08))
-	part(MeshFactory.cyl(0.1, 0.1, 0.08, 12), Color(0.2, 0.2, 0.22), Vector3(-0.1, 0, 0.1)).rotation.z = PI * 0.5
-	var tube := part(MeshFactory.cyl(0.035, 0.05, 0.6, 10), Color(0.25, 0.25, 0.27), Vector3(0, -0.02, -0.3))
-	tube.rotation.x = PI * 0.5
-	part(MeshFactory.box(Vector3(0.04, 0.14, 0.04)), Color(0.2, 0.2, 0.22), Vector3(0, -0.14, 0.12))
+	var body := MeshInstance3D.new()
+	body.mesh = MeshFactory.prefab(_model_id(), _model_parts)
+	body.material_override = MeshFactory.prop_mat(true)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	model.add_child(body)
 	_nozzle = Node3D.new()
 	_nozzle.position = Vector3(0, -0.02, -0.62)
 	model.add_child(_nozzle)
@@ -46,6 +45,44 @@ func build_model() -> void:
 	_air.emitting = false
 	_air.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_nozzle.add_child(_air)
+
+
+func _model_id() -> String:
+	return "blower_model"
+
+
+## Soplador de mano: carcasa brillante, voluta con rejilla, asa superior con gatillo, tubo con
+## refuerzos y boquilla naranja. Una sola malla (una llamada de dibujo).
+func _model_parts() -> Array:
+	var orange := MeshFactory.pc(Color(0.93, 0.5, 0.15), MeshFactory.PAT_METAL)
+	var grey := MeshFactory.pc(Color(0.24, 0.25, 0.27), MeshFactory.PAT_METAL)
+	var black := MeshFactory.pc(Color(0.08, 0.08, 0.09), MeshFactory.PAT_PLAIN)
+	var cream := MeshFactory.pc(Color(0.95, 0.92, 0.84), MeshFactory.PAT_PLAIN)
+	var side := Basis(Vector3.BACK, PI * 0.5)
+	var along := Basis(Vector3.RIGHT, PI * 0.5)
+	var p := []
+	p.append(MeshFactory.part("box", Vector3(0, 0, 0.08), Vector3(0.17, 0.16, 0.3), orange))
+	p.append(MeshFactory.part("sph", Vector3(0, 0.07, 0.08), Vector3(0.17, 0.11, 0.3), orange))
+	p.append(MeshFactory.part("cyl", Vector3(-0.11, -0.01, 0.07), Vector3(0.25, 0.1, 0.25), grey, side))
+	p.append(MeshFactory.part("cyl", Vector3(-0.163, -0.01, 0.07), Vector3(0.19, 0.012, 0.19), black, side))
+	for k in 4:
+		p.append(MeshFactory.part("box", Vector3(-0.17, -0.01, 0.07), Vector3(0.008, 0.19, 0.014), grey, Basis(Vector3.RIGHT, k * PI / 4.0)))
+	p.append(MeshFactory.part("cyl", Vector3(-0.172, -0.01, 0.07), Vector3(0.05, 0.012, 0.05), orange, side))
+	# Depósito lateral con tapón y empuñadura de pistola con gatillo.
+	p.append(MeshFactory.part("box", Vector3(0.1, -0.05, 0.15), Vector3(0.05, 0.09, 0.14), grey))
+	p.append(MeshFactory.part("cyl", Vector3(0.1, 0.0, 0.2), Vector3(0.035, 0.025, 0.035), MeshFactory.pc(Color(0.8, 0.18, 0.12), MeshFactory.PAT_PLAIN)))
+	p.append(MeshFactory.part("box", Vector3(0, -0.15, 0.15), Vector3(0.04, 0.15, 0.05), black, Basis(Vector3.RIGHT, 0.25)))
+	p.append(MeshFactory.part("box", Vector3(0, -0.1, 0.1), Vector3(0.018, 0.045, 0.03), MeshFactory.pc(Color(0.85, 0.2, 0.15), MeshFactory.PAT_PLAIN)))
+	# Franjas decorativas.
+	p.append(MeshFactory.part("box", Vector3(0.087, 0.01, 0.08), Vector3(0.004, 0.03, 0.22), cream))
+	p.append(MeshFactory.part("box", Vector3(0.087, -0.025, 0.08), Vector3(0.004, 0.012, 0.22), black))
+	# Tubo con refuerzos y boquilla.
+	p.append(MeshFactory.part("cyl", Vector3(0, -0.02, -0.3), Vector3(0.088, 0.56, 0.088), grey, along))
+	for z in [-0.08, -0.15]:
+		p.append(MeshFactory.part("cyl", Vector3(0, -0.02, z), Vector3(0.1, 0.02, 0.1), black, along))
+	p.append(MeshFactory.part("cyl", Vector3(0, -0.02, -0.6), Vector3(0.08, 0.08, 0.08), orange, along))
+	p.append(MeshFactory.part("cyl", Vector3(0, -0.02, -0.642), Vector3(0.086, 0.014, 0.086), black, along))
+	return p
 
 
 func process_tool(delta: float, held: bool, _pressed: bool) -> void:
