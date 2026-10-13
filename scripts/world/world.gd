@@ -80,8 +80,20 @@ func _ready() -> void:
 	EventBus.gate_opened.connect(_on_gate_opened)
 	EventBus.zone_completed.connect(func(z): _restore_zone(z, true))
 	EventBus.zone_unlocked.connect(func(_z): _refresh_auto_gates())
+	_setup_visual_extras()
+	_setup_gameplay_extras()
 	SaveManager.register("world", self)
 	GameManager.requested_new = false
+
+
+## Punto de enganche para sistemas visuales adicionales (césped, decoración dinámica...).
+func _setup_visual_extras() -> void:
+	pass
+
+
+## Punto de enganche para sistemas de juego adicionales (compañero, guías...).
+func _setup_gameplay_extras() -> void:
+	pass
 
 
 func _exit_tree() -> void:
