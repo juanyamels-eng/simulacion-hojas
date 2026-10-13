@@ -4,8 +4,10 @@
 Técnicas: ruido filtrado por FFT (bucles perfectos), síntesis aditiva tipo piano/guitarra,
 campanas inarmónicas, barridos FM para pájaros y reverberación por convolución.
 Uso: python3 tools/gen_audio.py  ->  assets/audio/*.wav (22,05 kHz, mono, 16 bits)
+     python3 tools/gen_audio.py --only-new  ->  solo los sonidos añadidos después (gen_extra)
 """
 import os
+import sys
 import wave
 import numpy as np
 
@@ -305,11 +307,99 @@ def gen_music_2():
     save("music_2", out, 0.6)
 
 
+# ----------------------------------------------------------------- añadidos (fanfarria, avisos, Bellota)
+
+def brass(freq, sec, vel=1.0):
+    """Metal suave: armónicos que se abren durante el ataque y vibrato tardío."""
+    tt = t(sec)
+    vib = 1 + 0.006 * np.sin(2 * np.pi * 5.2 * tt) * np.clip((tt - 0.25) / 0.3, 0, 1)
+    phase = 2 * np.pi * freq * np.cumsum(vib) / SR
+    x = np.zeros_like(tt)
+    for h in range(1, 11):
+        bright = np.clip(tt / (0.012 * h + 0.01), 0, 1)
+        x += vel / h * bright * np.sin(h * phase)
+    e = np.minimum(tt / 0.03, 1) * np.exp(-tt * 0.5)
+    rel = int(min(0.12, sec * 0.4) * SR)
+    e[-rel:] *= np.linspace(1, 0, rel)
+    return band(x * e, 90, 5000)
+
+
+def timpani(freq, sec):
+    tt = t(sec)
+    f = freq * (1 + 0.15 * np.exp(-tt * 18))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 3.5)
+    x += band(noise(sec), 60, 500) * env(len(tt), 0.002, 0.05, 6) * 0.4
+    return x
+
+
+def yip(f0, f1, sec=0.2):
+    """Ladrido pequeño y simpático: glissando con formantes y aliento."""
+    tt = t(sec)
+    f = f0 + (f1 - f0) * (tt / sec) ** 0.6
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = sum(np.sin(h * ph) / (h ** 0.9) for h in range(1, 8))
+    x = band(x, 450, 3200) + band(noise(sec), 900, 4000) * 0.12
+    return x * env(len(tt), 0.006, sec * 0.55, 2.6)
+
+
+def gen_extra():
+    """Sonidos añadidos más tarde. Usan su propio generador aleatorio para que
+    los sonidos anteriores salgan idénticos al regenerar."""
+    global rng
+    saved = rng
+    rng = np.random.default_rng(20261013)
+    # Fanfarria de zona restaurada (Sol mayor): anacrusa, acorde largo, timbal y campanitas.
+    out = np.zeros(int(3.4 * SR))
+    for k, n in enumerate([67, 71, 74]):
+        place(out, brass(midi(n), 0.16, 0.8), k * 0.13)
+    for n, v in [(55, 0.7), (62, 0.6), (67, 0.8), (71, 0.6), (79, 0.9)]:
+        place(out, brass(midi(n), 1.7, v), 0.39)
+    place(out, timpani(98, 1.4) * 1.6, 0.39)
+    for k, n in enumerate([91, 95, 98, 103]):
+        place(out, bell(midi(n), 1.2) * 0.35, 0.5 + k * 0.08)
+    place(out, brass(midi(74), 0.18, 0.6), 2.15)
+    place(out, brass(midi(79), 0.9, 0.7), 2.3)
+    place(out, brass(midi(83), 0.9, 0.5), 2.3)
+    save("ui_fanfare", fade(reverb(out, 1.6, 0.3)), 0.75)
+    # Aviso suave de mejora disponible.
+    x = np.zeros(int(0.9 * SR))
+    place(x, bell(midi(84), 0.6), 0)
+    place(x, bell(midi(91), 0.7) * 0.85, 0.11)
+    place(x, crackle(0.3, 300, 4000, 9000) * env(int(0.3 * SR), 0.01, 0.15, 3) * 0.6, 0.1)
+    save("ui_notify", fade(reverb(x, 0.8, 0.25)), 0.5)
+    # Bellota: ladridos cortos, contenta (jadeo + gemidito) y olfateo.
+    save("dog_bark_1", fade(yip(760, 520, 0.19)), 0.7)
+    b2 = np.zeros(int(0.42 * SR))
+    place(b2, yip(840, 600, 0.15), 0)
+    place(b2, yip(900, 640, 0.14) * 0.8, 0.2)
+    save("dog_bark_2", fade(b2), 0.7)
+    happy = np.zeros(int(1.2 * SR))
+    for k in range(3):
+        pant = band(noise(0.11), 700, 3600) * np.sin(np.linspace(0, np.pi, int(0.11 * SR))) ** 2
+        place(happy, pant * (0.55 + 0.1 * k), k * 0.2)
+    tt = t(0.4)
+    wf = 950 + 380 * np.sin(np.pi * tt / 0.4) + 25 * np.sin(2 * np.pi * 9 * tt)
+    whine = np.sin(2 * np.pi * np.cumsum(wf) / SR) * np.sin(np.pi * tt / 0.4) ** 2
+    place(happy, whine * 0.35, 0.62)
+    save("dog_happy", fade(reverb(happy, 0.4, 0.12)), 0.6)
+    sniff = np.zeros(int(0.7 * SR))
+    for k in range(4):
+        s1 = band(noise(0.07), 1800, 6500) * np.sin(np.linspace(0, np.pi, int(0.07 * SR)))
+        place(sniff, s1, k * 0.15)
+    save("dog_sniff", fade(sniff), 0.4)
+    rng = saved
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
+    if "--only-new" in sys.argv:
+        gen_extra()
+        print("Sonidos nuevos generados en", os.path.abspath(OUT))
+        sys.exit(0)
     gen_sfx()
     gen_loops()
     gen_ui()
     gen_music_1()
     gen_music_2()
+    gen_extra()
     print("Audio generado en", os.path.abspath(OUT))

@@ -97,7 +97,14 @@ func _setup_visual_extras() -> void:
 
 ## Punto de enganche para sistemas de juego adicionales (compañero, guías...).
 func _setup_gameplay_extras() -> void:
-	pass
+	# Bellota, la perrita compañera (no en Contrarreloj: desordenaría los montones cronometrados).
+	# Las guías del HUD (contenedor, puertas, mejoras) las crea el propio HUD.
+	if GameManager.is_time_attack():
+		return
+	var dog := Companion.new()
+	dog.name = "Bellota"
+	add_child(dog)
+	dog.setup(self, leaf_manager, player)
 
 
 func _exit_tree() -> void:

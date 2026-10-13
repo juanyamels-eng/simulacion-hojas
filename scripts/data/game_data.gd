@@ -221,6 +221,10 @@ const ACHIEVEMENTS := [
 	{"id": "all_tools", "name": "Caja de herramientas", "desc": "Usa todas las herramientas."},
 	{"id": "secret", "name": "Bajo tierra", "desc": "Descubre el taller subterráneo."},
 	{"id": "play_hour", "name": "Solo un poco más", "desc": "Juega durante una hora."},
+	{"id": "pet_dog", "name": "¿Quién es una buena perrita?", "desc": "Acaricia a Bellota."},
+	{"id": "pet_dog_25", "name": "Uña y carne", "desc": "Acaricia a Bellota 25 veces."},
+	{"id": "dog_find", "name": "Olfato fino", "desc": "Recoge una postal que Bellota haya olfateado."},
+	{"id": "dog_pile", "name": "¡Bellota, no!", "desc": "Mira cómo Bellota se lanza a un montón de hojas."},
 ]
 
 # Objetivos secundarios con recompensa.
@@ -240,6 +244,30 @@ const OBJECTIVES := [
 	{"id": "o_postcards", "name": "Encuentra todas las postales", "stat": "postcards", "target": 12, "reward": 12000},
 	{"id": "o_zones_10", "name": "Restaura toda la finca", "stat": "zones_completed", "target": 10, "reward": 50000},
 ]
+
+# Bellota, la perrita compañera (diseño original de Villa Hojarasca).
+const COMPANION := {
+	"name": "Bellota",
+	"follow_dist": 2.6,        # distancia cómoda detrás/al lado del jugador (m)
+	"start_follow": 4.6,       # a partir de aquí echa a andar tras el jugador
+	"teleport_dist": 24.0,     # si se queda muy atrás, aparece junto al jugador (fuera de cámara)
+	"walk_speed": 2.4,
+	"run_speed": 7.2,
+	"pile_min_height": 0.4,    # altura mínima (m) de un montón para lanzarse dentro
+	"pile_search": 11.0,       # radio de búsqueda de montones alrededor del jugador
+	"pile_cooldown": [40.0, 80.0],
+	"sniff_radius": 13.0,      # olfatea postales escondidas a esta distancia del jugador
+	"sniff_cooldown": 75.0,
+	"pet_cooldown": 0.9,
+}
+
+# Guías del HUD (marcadores en pantalla).
+const GUIDES := {
+	"bin_hide_dist": 2.6,
+	"gate_hide_dist": 3.2,
+	"loose_bag_dist": 28.0,
+	"upgrade_toast_cooldown": 150.0,
+}
 
 static func zone_by_id(id: String) -> Dictionary:
 	for z in ZONES:

@@ -78,6 +78,9 @@ func _on_stat(key: String, v: float) -> void:
 			if v >= 1: unlock("no_blower_zone")
 		"play_time":
 			if v >= 3600: unlock("play_hour")
+		"dog_pets":
+			if v >= 1: unlock("pet_dog")
+			if v >= 25: unlock("pet_dog_25")
 
 
 func _on_upgrade(id: String, _lvl: int) -> void:
