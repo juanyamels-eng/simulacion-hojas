@@ -1,6 +1,6 @@
 class_name SettingsPanel
 extends Modal
-## Ajustes: gráficos, FPS, cámara (sensibilidad, invertir Y, balanceo, FOV, giroscopio),
+## Ajustes: gráficos, FPS, resaltar hojas (contorno de color para verlas en cualquier suelo), cámara (sensibilidad, invertir Y, balanceo, FOV, giroscopio),
 ## volúmenes independientes, vibración y tamaño de controles.
 
 
@@ -16,6 +16,7 @@ func _ready() -> void:
 	v.add_child(_choice("Calidad", "graphics", [["auto", "Automático"], ["low", "Bajo"], ["medium", "Medio"], ["high", "Alto"]]))
 	v.add_child(_choice("Límite de FPS", "fps", [[30, "30"], [60, "60"], [0, "Máximo"]]))
 	v.add_child(_toggle("Mostrar FPS", "show_fps"))
+	v.add_child(_toggle("Resaltar hojas", "highlight_leaves"))
 	v.add_child(_section("Cámara y controles"))
 	v.add_child(_slider("Sensibilidad horizontal", "sens_x", 0.2, 3.0, 0.05))
 	v.add_child(_slider("Sensibilidad vertical", "sens_y", 0.2, 3.0, 0.05))
