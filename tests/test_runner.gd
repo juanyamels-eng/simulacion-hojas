@@ -239,6 +239,8 @@ func _ready() -> void:
 	await _gameplay_extras(world, ui)
 	# --- Rendimiento del sistema de hojas (CPU) ---
 	await _perf(world)
+	# --- Hojas individuales (v3): mallas, montones de hojas, resaltados y rendimiento con 65.000 hojas ---
+	await _leaves_v3(world)
 	print("=== %d comprobaciones, %d fallos ===" % [checks, failures])
 	for slot in ["campaign"]:
 		SaveManager.delete_slot(slot)
@@ -608,3 +610,284 @@ func _aim_zone(p: PlayerController, sim: LeafSimulationSystem, cell_zone: int) -
 	var stand := target - dir * 2.0
 	p.teleport(Vector3(stand.x, sim.height_at(stand.x, stand.z) + 0.1, stand.z), atan2(-dir.x, -dir.z))
 	p.cam.pitch = -0.62
+
+
+# ---------------------------------------------------------------- hojas individuales (v3)
+
+var _perf_mms: Array[MultiMesh] = []
+
+
+## Hojas individuales: mallas ligeras con 5 siluetas sin triángulos dados la vuelta, montones hechos solo
+## de hojas (la hojarasca suelta no flota, un montón grande sí abulta), captura desde lo alto de un
+## montón, círculo de resaltado, «Resaltar hojas», brillo de las últimas hojas de una zona y rendimiento.
+func _leaves_v3(world: World) -> void:
+	var lm: LeafManager = world.leaf_manager
+	var sim: LeafSimulationSystem = lm.sim
+	# --- Mallas
+	var near := LeafMeshes.leaf_mesh()
+	var nv := near.surface_get_array_len(0)
+	var nt := near.surface_get_array_index_len(0) / 3
+	var lod_v := LeafMeshes.leaf_mesh_lod().surface_get_array_len(0)
+	var far_v := LeafMeshes.leaf_mesh_far().surface_get_array_len(0)
+	ok(nv <= 32 and lod_v <= 8 and far_v <= 4, "mallas de hoja ligeras: %d vértices (%d triángulos), LOD %d, lejana %d" % [nv, nt, lod_v, far_v])
+	var idx := LeafMeshes.triangle_indices()
+	var ref := LeafMeshes.shape_points(2)
+	var flipped := 0
+	for s in LeafMeshes.SHAPES:
+		var pts := LeafMeshes.shape_points(s)
+		for t in range(0, idx.size(), 3):
+			var a_ref := LeafMeshes.signed_area(ref, idx[t], idx[t + 1], idx[t + 2])
+			var a := LeafMeshes.signed_area(pts, idx[t], idx[t + 1], idx[t + 2])
+			if a * signf(a_ref) < -0.00001:
+				flipped += 1
+	ok(flipped == 0 and LeafMeshes.SHAPES == 5, "5 siluetas (arce, roble, abedul, sauce, ginkgo) sin triángulos dados la vuelta (%d)" % flipped)
+	var pm := MeshFactory.leaf_mesh()
+	ok(pm.surface_get_array_len(0) >= 20 and MeshFactory.leaf_mesh_lod().surface_get_array_len(0) >= 6, "hojas de partículas con forma de hoja (%d vértices)" % pm.surface_get_array_len(0))
+	# --- La hojarasca natural (sin juntar) no flota: altura de montón ~0 en una zona intacta.
+	var zi := GameData.zone_index("laberinto")
+	var zr: Rect2 = GameData.ZONES[zi]["rect"]
+	var max_h := 0.0
+	var lifted := 0
+	var cells := 0
+	var x := zr.position.x + 0.25
+	while x < zr.end.x:
+		var z := zr.position.y + 0.25
+		while z < zr.end.y:
+			var h := lm.pile_height_at(x, z)
+			max_h = maxf(max_h, h)
+			if h > 0.05:
+				lifted += 1
+			cells += 1
+			z += 0.5
+		x += 0.5
+	ok(max_h < 0.3 and lifted * 100 < cells, "la hojarasca suelta yace en el suelo (altura máx. %.2f m, %d de %d celdas por encima de 5 cm)" % [max_h, lifted, cells])
+	# --- Un montón de 1000 hojas abulta; alrededor, las hojas sueltas no se levantan por el halo.
+	var pc := _free_flat(world, world.player.global_position + Vector3(4.0, 0.0, 0.0))
+	var moved := _make_pile(sim, pc, 1000, 1.3)
+	lm.cluster.flush(sim, true)
+	var ph := lm.pile_height_at(pc.x, pc.z)
+	var ring := 0.0
+	for k in 12:
+		var q := pc + Vector3(cos(k * TAU / 12.0), 0.0, sin(k * TAU / 12.0)) * 2.4
+		ring = maxf(ring, lm.pile_height_at(q.x, q.z))
+	ok(ph > 0.4 and ph < 1.0 and ring < ph * 0.35, "montón de %d hojas: %.2f m de alto, borde a 2,4 m: %.2f m" % [moved, ph, ring])
+	var thin := 0
+	var pile_cells := 0
+	for dz in range(-2, 3):
+		for dx in range(-2, 3):
+			var c := sim.cell_index(pc.x + dx * 0.5, pc.z + dz * 0.5)
+			if dx * dx + dz * dz > 4:
+				continue
+			if c >= 0 and lm.pile_height_at(pc.x + dx * 0.5, pc.z + dz * 0.5) > 0.1:
+				pile_cells += 1
+				if float(sim.cell_count[c]) * LeafClusterSystem.LAYERS_PER_LEAF < 2.0:
+					thin += 1
+	ok(pile_cells > 0 and thin == 0, "el montón está cubierto de hojas (%d celdas altas, %d con menos de 2 capas)" % [pile_cells, thin])
+	# --- Coger de lo alto del montón: la hoja sale de donde se ve, escalada, y llega a la mano.
+	var top := -1
+	var c0 := sim.cell_index(pc.x, pc.z)
+	var li := sim.cell_head[c0]
+	while li >= 0:
+		if sim.state[li] == LeafSimulationSystem.S_SLEEP and sim.cust[li].b > 0.8:
+			top = li
+			break
+		li = sim.nxt[li]
+	if top >= 0:
+		var gy := sim.height_at(sim.pos[top].x, sim.pos[top].z)
+		var arrived0 := sim.arrived_count[LeafManager.P_HAND]
+		sim.suck_pos[LeafManager.P_HAND] = pc + Vector3(0.0, 1.4, 2.0)
+		sim.capture(top, LeafManager.P_HAND, 3.5)
+		var sc := sim.leaf_xform(top).basis.x.length()
+		ok(sim.state[top] == LeafSimulationSystem.S_SUCKED and sim.pos[top].y > gy + 0.25 and absf(sc - LeafSimulationSystem.SUCK_SCALE) < 0.01, "una hoja cogida de lo alto del montón sale a %.2f m y vuela escalada ×%.2f" % [sim.pos[top].y - gy, sc])
+		for k in 60:
+			sim.simulate(1.0 / 60.0)
+			if sim.state[top] == LeafSimulationSystem.S_REMOVED:
+				break
+		ok(sim.state[top] == LeafSimulationSystem.S_REMOVED and sim.arrived_count[LeafManager.P_HAND] > arrived0, "la hoja llega volando a la mano")
+		sim.take_arrived(LeafManager.P_HAND)
+	else:
+		ok(false, "hay hojas en lo alto del montón")
+	# --- Círculo de resaltado (uniformes del shader).
+	lm.set_highlight(pc, 0.6)
+	var hv: Vector4 = lm.material.get_shader_parameter("highlight")
+	ok(absf(hv.w - 0.6) < 0.001 and hv.distance_to(Vector4(pc.x, pc.y, pc.z, 0.6)) < 0.01, "set_highlight fija el círculo de resaltado")
+	lm.clear_highlight()
+	hv = lm.material.get_shader_parameter("highlight")
+	ok(hv.w == 0.0, "clear_highlight lo apaga")
+	var gr := lm.highlight_grab(pc, 1.0, 6)
+	var inside := 0
+	for dz in range(-3, 4):
+		for dx in range(-3, 4):
+			var c := sim.cell_index(pc.x + dx * 0.5, pc.z + dz * 0.5)
+			if c < 0:
+				continue
+			var lj := sim.cell_head[c]
+			while lj >= 0:
+				var d := sim.pos[lj] - pc
+				d.y *= 0.5
+				if d.length() <= gr:
+					inside += 1
+				lj = sim.nxt[lj]
+	ok(gr > 0.0 and gr < 1.0 and inside >= 6, "highlight_grab ajusta el círculo a las 6 hojas más cercanas (radio %.2f m, %d dentro)" % [gr, inside])
+	var empty := _free_flat(world, pc + Vector3(0.0, 0.0, 30.0))
+	for i in sim.n:
+		if sim.state[i] == LeafSimulationSystem.S_SLEEP and Vector2(sim.pos[i].x - empty.x, sim.pos[i].z - empty.z).length() < 1.2:
+			sim.remove_leaf(i)
+	var gr0 := lm.highlight_grab(empty, 1.0, 6)
+	var hv0: Vector4 = lm.material.get_shader_parameter("highlight")
+	ok(gr0 == 0.0 and hv0.w == 0.0, "sin hojas cerca no se resalta nada")
+	lm.clear_highlight()
+	# --- Ajuste «Resaltar hojas».
+	SettingsManager.set_value("highlight_leaves", true)
+	await frames(2)
+	var rv: float = lm.material.get_shader_parameter("reveal")
+	SettingsManager.set_value("highlight_leaves", false)
+	await frames(2)
+	var rv2: float = lm.material.get_shader_parameter("reveal")
+	ok(rv == 1.0 and rv2 == 0.0, "Ajustes → Resaltar hojas activa y desactiva el contorno de color")
+	# --- Últimas hojas: una zona al 96 % brilla sola; al 100 % se apaga.
+	var left := 0
+	for i in sim.n:
+		if sim.zone_origin[i] == zi and sim.state[i] != LeafSimulationSystem.S_REMOVED:
+			left += 1
+	var keep := maxi(int(float(sim.zone_initial[zi]) * 0.04), 1)
+	var removed := 0
+	for i in sim.n:
+		if left - removed <= keep:
+			break
+		if sim.zone_origin[i] == zi and sim.state[i] == LeafSimulationSystem.S_SLEEP:
+			sim.remove_leaf(i)
+			removed += 1
+	lm.push_counts()
+	var ga: Vector4 = lm.material.get_shader_parameter("glow_amount")
+	var gz: Vector4 = lm.material.get_shader_parameter("glow_zones")
+	ok(lm.zone_glow(zi) == 1.0 and ga.x + ga.y + ga.z + ga.w >= 1.0 and (gz.x == zi + 1 or gz.y == zi + 1 or gz.z == zi + 1 or gz.w == zi + 1), "zona al %.1f %%: sus últimas hojas brillan" % AreaManager.pct("laberinto"))
+	for i in sim.n:
+		if sim.zone_origin[i] == zi and sim.state[i] != LeafSimulationSystem.S_REMOVED:
+			sim.remove_leaf(i)
+	lm.push_counts()
+	ok(lm.zone_glow(zi) == 0.0, "zona limpia del todo: se apaga el brillo")
+	lm.set_zone_glow(zi, 0.5)
+	ok(lm.zone_glow(zi) == 0.5, "set_zone_glow permite encender el brillo de una zona a mano")
+	lm.set_zone_glow(zi, 0.0)
+	await _perf_65k(world)
+
+
+## Punto llano y libre cerca de c (sin obstáculos en 2 m a la redonda).
+func _free_flat(world: World, c: Vector3) -> Vector3:
+	for r in range(0, 40):
+		for k in 12:
+			var q := c + Vector3(r * 0.75, 0.0, 0.0).rotated(Vector3.UP, k * TAU / 12.0)
+			var free := not world.terrain.is_solid(q.x, q.z)
+			for a in 8:
+				var e := q + Vector3(2.0, 0.0, 0.0).rotated(Vector3.UP, a * TAU / 8.0)
+				if world.terrain.is_solid(e.x, e.z):
+					free = false
+			if free:
+				return Vector3(q.x, world.terrain.height_at(q.x, q.z), q.z)
+	return c
+
+
+func _perf_chunk(_c: int) -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = LeafMeshes.leaf_mesh()
+	_perf_mms.append(mm)
+	return mm
+
+
+## Rendimiento con ~65.000 hojas (el mapa grande): un segundo sistema de hojas sobre la misma rejilla.
+## Mide montar el dibujado, regenerar los montones, simular con las hojas activas de cada calidad y
+## estima los vértices de hojas por fotograma desde la entrada para cada calidad.
+func _perf_65k(world: World) -> void:
+	var lm: LeafManager = world.leaf_manager
+	var big := LeafSimulationSystem.new()
+	big.setup_grid(world.terrain)
+	big.create_chunk = _perf_chunk
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 65
+	var want := 65000
+	var pts := PackedVector3Array()
+	var guard := 0
+	while pts.size() < want and guard < want * 20:
+		guard += 1
+		var zd: Dictionary = GameData.ZONES[rng.randi() % GameData.ZONES.size()]
+		var r: Rect2 = zd["rect"]
+		var x := rng.randf_range(r.position.x, r.end.x)
+		var zz := rng.randf_range(r.position.y, r.end.y)
+		var c := big.cell_index(x, zz)
+		if c < 0 or big.solid[c] != 0:
+			continue
+		pts.append(Vector3(x, big.height_at(x, zz) + 0.015, zz))
+	big.allocate(pts.size())
+	for i in big.n:
+		big.pos[i] = pts[i]
+		big.yaw[i] = rng.randf() * TAU
+		big.colr[i] = Color(0.9, 0.5, 0.1)
+		big.cust[i] = Color(1.0, rng.randf(), rng.randf(), rng.randf())
+		big.link_cell(i, big.cell_index(pts[i].x, pts[i].z))
+	var t0 := Time.get_ticks_usec()
+	big.build_render()
+	print("  PERF %d hojas: montar el dibujado %.0f ms (%d bloques)" % [big.n, (Time.get_ticks_usec() - t0) / 1000.0, _perf_mms.size()])
+	var cl := LeafClusterSystem.new()
+	cl.setup(big.gw, big.gh)
+	big.cluster = cl
+	t0 = Time.get_ticks_usec()
+	cl.flush(big, true)
+	print("  PERF %d hojas: textura de montones completa %.1f ms" % [big.n, (Time.get_ticks_usec() - t0) / 1000.0])
+	# Simulación con las hojas activas de cada calidad (todas cerca de la cámara: el peor caso).
+	var focus := GameData.START_POS
+	big.focus = focus
+	for count in [350, 750, 1300, 3000]:
+		big.max_active = count
+		var n := 0
+		var i := 0
+		while n < count and i < big.n:
+			if big.state[i] == LeafSimulationSystem.S_SLEEP and Vector2(big.pos[i].x - focus.x, big.pos[i].z - focus.z).length() < 16.0:
+				if big.wake(i, Vector3(rng.randf_range(-2, 2), rng.randf_range(1, 4), rng.randf_range(-2, 2))):
+					n += 1
+			i += 1
+		t0 = Time.get_ticks_usec()
+		for k in 10:
+			big.simulate(1.0 / 60.0)
+		print("  PERF %d hojas: %d activas cerca de la cámara %.2f ms/frame (CPU escritorio)" % [big.n, big.active_n, (Time.get_ticks_usec() - t0) / 10000.0])
+		for k in 240:
+			big.simulate(1.0 / 60.0)
+	# Vértices de hojas por fotograma desde la entrada mirando a la finca (bloques visibles enteros).
+	var fwd := Vector3(0, 0, -1)
+	var half := deg_to_rad(54.0)
+	var size := LeafSimulationSystem.CHUNK_CELLS * 0.5
+	var nv := LeafMeshes.leaf_mesh().surface_get_array_len(0)
+	var lv := LeafMeshes.leaf_mesh_lod().surface_get_array_len(0)
+	var fv := LeafMeshes.leaf_mesh_far().surface_get_array_len(0)
+	for level in [0, 1, 2]:
+		var q: Dictionary = LeafManager.QUALITY[level]
+		var near_n := 0
+		var lod_n := 0
+		var far_n := 0
+		for c in big.cw * big.ch:
+			if big.chunk_count[c] == 0:
+				continue
+			var center := Vector3(big.ox + (c % big.cw + 0.5) * size, focus.y, big.oz + (c / big.cw + 0.5) * size)
+			var rel := center - focus
+			var dist := rel.length()
+			var d := sqrt(maxf(dist * dist - size * size * 0.5, 0.0))
+			if d >= float(q["draw"]):
+				continue
+			if dist > 8.0 and rel.normalized().dot(fwd) < cos(half + atan(size * 0.72 / dist)):
+				continue
+			if d <= float(q["lod"]):
+				near_n += big.chunk_count[c]
+			elif d <= float(q["far"]):
+				lod_n += big.chunk_count[c]
+			else:
+				far_n += big.chunk_count[c]
+		var verts := near_n * nv + lod_n * lv + far_n * fv
+		print("  PERF %d hojas, calidad %d: %d cerca + %d LOD + %d lejanas = %d vértices de hojas por fotograma" % [big.n, level, near_n, lod_n, far_n, verts])
+	ok(big.n >= 60000, "rendimiento medido con %d hojas" % big.n)
+	for mm in _perf_mms:
+		mm.instance_count = 0
+	_perf_mms.clear()
+	lm.cluster.flush(lm.sim, true)

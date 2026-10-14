@@ -66,57 +66,21 @@ static func sphere(radius: float, segs: int = 8, rings: int = 5) -> SphereMesh:
 	return _meshes[key]
 
 
-## Hoja con lóbulos, nervio central plegado y puntas curvadas. Unos 22 triángulos, opaca.
+## Hoja de arce para partículas (hojas que caen, estallidos): plegada por el nervio, bordes algo
+## levantados y pecíolo; ~0,22 m de largo a escala 1. La geometría es la de LeafMeshes (forma 0).
 static func leaf_mesh() -> ArrayMesh:
 	if _meshes.has("leaf"):
 		return _meshes["leaf"]
-	var half := [
-		Vector2(0.0, 0.56), Vector2(0.12, 0.38), Vector2(0.29, 0.40), Vector2(0.23, 0.2),
-		Vector2(0.45, 0.1), Vector2(0.31, -0.05), Vector2(0.36, -0.22), Vector2(0.15, -0.19),
-		Vector2(0.05, -0.33),
-	]
-	var outline: Array[Vector2] = []
-	for p in half:
-		outline.append(p)
-	for k in range(half.size() - 1, 0, -1):
-		outline.append(Vector2(-half[k].x, half[k].y))
-	outline.append(Vector2(0.0, -0.36))
-	var scale := 0.24
-	var verts := PackedVector3Array()
-	var cols := PackedColorArray()
-	var norms := PackedVector3Array()
-	var idx := PackedInt32Array()
-	verts.append(Vector3(0.0, 0.035, 0.05) * scale)
-	cols.append(Color(0.78, 0.74, 0.7))
-	norms.append(Vector3.UP)
-	for p in outline:
-		var curl := 0.06 * absf(p.y) + 0.05 * absf(p.x)
-		verts.append(Vector3(p.x, curl, -p.y) * scale)
-		cols.append(Color(1.05, 1.0, 0.95))
-		norms.append(Vector3(p.x * 0.5, 1.0, -p.y * 0.3).normalized())
-	var m := outline.size()
-	for k in m:
-		idx.append_array([0, 1 + k, 1 + (k + 1) % m])
-	# Pecíolo.
-	var s0 := verts.size()
-	verts.append_array([Vector3(-0.018, 0.01, 0.34) * scale, Vector3(0.018, 0.01, 0.34) * scale, Vector3(0.0, 0.02, 0.6) * scale])
-	cols.append_array([Color(0.6, 0.5, 0.4), Color(0.6, 0.5, 0.4), Color(0.55, 0.45, 0.35)])
-	norms.append_array([Vector3.UP, Vector3.UP, Vector3.UP])
-	idx.append_array([s0, s0 + 1, s0 + 2])
-	var mesh := _array_mesh(verts, norms, cols, idx)
+	var mesh := LeafMeshes.particle_leaf(0.24)
 	_meshes["leaf"] = mesh
 	return mesh
 
 
-## Versión lejana: rombo de 2 triángulos.
+## Versión barata para estallidos y remolinos: hoja ovalada plegada de 7 vértices.
 static func leaf_mesh_lod() -> ArrayMesh:
 	if _meshes.has("leaf_lod"):
 		return _meshes["leaf_lod"]
-	var s := 0.24
-	var verts := PackedVector3Array([Vector3(0, 0.01, -0.56) * s, Vector3(0.4, 0.0, 0.0) * s, Vector3(0, 0.01, 0.36) * s, Vector3(-0.4, 0.0, 0.0) * s])
-	var norms := PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
-	var cols := PackedColorArray([Color(1, 1, 1), Color(1, 1, 1), Color(0.9, 0.9, 0.9), Color(1, 1, 1)])
-	var mesh := _array_mesh(verts, norms, cols, PackedInt32Array([0, 1, 2, 0, 2, 3]))
+	var mesh := LeafMeshes.particle_leaf_small(0.24)
 	_meshes["leaf_lod"] = mesh
 	return mesh
 

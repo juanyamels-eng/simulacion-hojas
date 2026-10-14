@@ -6,6 +6,12 @@ extends RefCounted
 ## solo las que toca una herramienta pasan a la lista "activa" y se simulan con física simple.
 ## La rejilla espacial (celdas de 0,5 m con listas enlazadas) permite consultas rápidas.
 ## El dibujado usa MultiMesh por bloques de 10 m: solo se actualizan las instancias que se mueven.
+##
+## Convención de la transformación de cada instancia (la lee shaders/leaf.gdshader):
+##   en reposo   → solo giro (sin inclinar): el shader la apoya en el terreno o en el montón;
+##   en el aire  → base inclinada (una de 4 variantes fijas por hoja; el shader añade la voltereta);
+##   capturada   → base inclinada y escalada ×SUCK_SCALE: vuela hacia su punto de succión y brilla.
+## Las hojas activas lejos de la cámara (focus) se simulan un fotograma sí y otro no con dt doble.
 
 const S_REMOVED := 0
 const S_SLEEP := 1
@@ -17,6 +23,9 @@ const STRIDE := 4096
 const GRAV := 9.8
 const SUCK_POINTS := 16
 const MAX_WIND := 4
+const SUCK_SCALE := 1.2
+const SUCK_POP := 2.2          # impulso vertical inicial al capturar (sube antes de volar a la mano)
+const FAR_THROTTLE := 18.0     # m: más lejos de la cámara, física a medio ritmo
 
 # --- Datos por hoja ---
 var n := 0
@@ -75,7 +84,9 @@ var chunk_count := PackedInt32Array()
 var chunk_cap := PackedInt32Array()
 var slot_leaf := PackedInt32Array()
 var btab: Array[Basis] = []
+var btab_s: Array[Basis] = []   # variantes en vuelo escaladas (hojas capturadas)
 var create_chunk: Callable      # (chunk_index, capacity) -> MultiMesh
+var cluster: LeafClusterSystem  # para saber a qué altura de un montón está una hoja al capturarla
 
 # --- Viento y succión ---
 var wind_n := 0
@@ -91,19 +102,25 @@ var ambient_wind := Vector3.ZERO
 
 var time := 0.0
 var rake_carry := 0.0
+var _hist := PackedInt32Array()
+var focus := Vector3(0.0, 0.0, 0.0)   # posición de la cámara (la actualiza LeafManager)
+var throttle := true
+var _frame := 0
 
 
 func _init() -> void:
+	# 8 bases por cada uno de los 32 giros: 0-3 en reposo (solo giro; la inclinación la pone el shader
+	# según el terreno o el montón) y 4-7 en el aire. btab_s: las de aire escaladas (capturadas).
 	for y in 32:
 		var by := Basis(Vector3.UP, y * TAU / 32.0)
-		btab.append(by * Basis(Vector3.RIGHT, 0.06))
-		btab.append(by * Basis(Vector3.RIGHT, -0.09) * Basis(Vector3.FORWARD, 0.06))
-		btab.append(by * Basis(Vector3.FORWARD, 0.11))
-		btab.append(by * Basis(Vector3.RIGHT, 0.13) * Basis(Vector3.FORWARD, -0.08))
-		btab.append(by * Basis(Vector3.RIGHT, 0.65))
-		btab.append(by * Basis(Vector3.FORWARD, 1.15))
-		btab.append(by * Basis(Vector3.RIGHT, 1.8))
-		btab.append(by * Basis(Vector3.FORWARD, 2.5) * Basis(Vector3.RIGHT, 0.5))
+		for k in 4:
+			btab.append(by)
+		var air: Array[Basis] = [by * Basis(Vector3.RIGHT, 0.65), by * Basis(Vector3.FORWARD, 1.15),
+			by * Basis(Vector3.RIGHT, 1.8), by * Basis(Vector3.FORWARD, 2.5) * Basis(Vector3.RIGHT, 0.5)]
+		for b in air:
+			btab.append(b)
+		for b in air:
+			btab_s.append(b.scaled(Vector3.ONE * SUCK_SCALE))
 	wind_o.resize(MAX_WIND)
 	wind_d.resize(MAX_WIND)
 	wind_p.resize(MAX_WIND * 4)
@@ -265,10 +282,12 @@ func _set_cell(i: int, c: int) -> void:
 
 func leaf_xform(i: int) -> Transform3D:
 	var yi := int(yaw[i] * 5.0929582) & 31
-	var t := i & 3
-	if state[i] != S_SLEEP:
-		t = 4 + ((int(time * 7.0) + i) & 3)
-	return Transform3D(btab[yi * 8 + t], pos[i])
+	var st := state[i]
+	if st == S_SLEEP:
+		return Transform3D(btab[yi * 8], pos[i])
+	if st == S_SUCKED:
+		return Transform3D(btab_s[yi * 4 + (i & 3)], pos[i])
+	return Transform3D(btab[yi * 8 + 4 + (i & 3)], pos[i])
 
 
 ## Construye los buffers iniciales de todos los bloques (tras generar o cargar).
@@ -438,6 +457,7 @@ func capture(i: int, point: int, start_speed: float) -> void:
 	var st := state[i]
 	if st == S_REMOVED or st == S_SUCKED:
 		return
+	var c := cell[i]
 	unlink_cell(i)
 	in_flight[point] += 1
 	if not _activate(i):
@@ -445,7 +465,14 @@ func capture(i: int, point: int, start_speed: float) -> void:
 		return
 	state[i] = S_SUCKED
 	aux[i] = point
-	vel[i] = Vector3(start_speed, 0.0, 0.0)
+	# Sale desde donde se ve (en un montón el shader la dibuja a altura H · profundidad) y da un saltito.
+	if cluster != null and c >= 0 and st == S_SLEEP:
+		var p := pos[i]
+		p.y += float(cluster.bytes[c * 2 + 1]) / 255.0 * LeafClusterSystem.PILE_MAX * cust[i].b
+		pos[i] = p
+	vel[i] = Vector3(start_speed, SUCK_POP, 0.0)
+	if lchunk[i] >= 0:
+		RenderingServer.multimesh_instance_set_transform(chunk_rid[lchunk[i]], lslot[i], leaf_xform(i))
 
 
 func _arrive(i: int, point: int) -> void:
@@ -510,34 +537,53 @@ func add_wind(origin: Vector3, dir: Vector3, rng: float, cos_half: float, power:
 
 func simulate(dt: float) -> void:
 	time += dt
-	var air_drag := exp(-1.4 * dt)
-	var ground_fric := exp(-6.5 * dt)
-	var gdt := GRAV * dt
+	_frame += 1
+	# Dos juegos de constantes: paso normal y paso doble (hojas lejanas, simuladas en fotogramas alternos).
+	var drag1 := exp(-1.4 * dt)
+	var fric1 := exp(-6.5 * dt)
+	var drag2 := drag1 * drag1
+	var fric2 := fric1 * fric1
+	var pop1 := exp(-5.0 * dt)
+	var pop2 := pop1 * pop1
+	var far2 := FAR_THROTTLE * FAR_THROTTLE if throttle else 1e12
+	var fcx := focus.x
+	var fcz := focus.z
+	var parity := _frame & 1
 	var k := 0
 	while k < active_n:
 		var i := active[k]
 		var st := state[i]
+		var p := pos[i]
+		var ldt := dt
+		var fdx := p.x - fcx
+		var fdz := p.z - fcz
+		var far := fdx * fdx + fdz * fdz > far2
+		if far:
+			if (i & 1) != parity:
+				k += 1
+				continue
+			ldt = dt * 2.0
 		if st == S_SUCKED:
 			var pt := aux[i]
-			var sp := pos[i]
-			var sd := suck_pos[pt] - sp
+			var sd := suck_pos[pt] - p
 			var dist := sd.length()
-			var spd := vel[i].x + suck_acc[pt] * dt
-			if dist < 0.3 or spd * dt >= dist:
+			var sv := vel[i]
+			var spd := sv.x + suck_acc[pt] * ldt
+			if dist < 0.3 or spd * ldt >= dist:
 				_arrive(i, pt)
 				continue
 			var dn := sd / dist
-			# Pequeño remolino alrededor del eje de succión.
+			# Pequeño remolino alrededor del eje de succión y saltito inicial que se apaga.
 			var swirl := Vector3(-dn.z, 0.0, dn.x) * sin(time * 9.0 + i) * minf(dist, 1.5) * 0.9
-			sp += (dn * spd + swirl) * dt
-			vel[i] = Vector3(spd, 0.0, 0.0)
-			pos[i] = sp
-			yaw[i] += 14.0 * dt
+			var pop := sv.y
+			p += (dn * spd + swirl + Vector3(0.0, pop, 0.0)) * ldt
+			vel[i] = Vector3(spd, pop * (pop2 if far else pop1), 0.0)
+			pos[i] = p
+			yaw[i] += 14.0 * ldt
 			if lchunk[i] >= 0:
-				RenderingServer.multimesh_instance_set_transform(chunk_rid[lchunk[i]], lslot[i], Transform3D(btab[(int(yaw[i] * 5.0929582) & 31) * 8 + 4 + ((int(time * 9.0) + i) & 3)], sp))
+				RenderingServer.multimesh_instance_set_transform(chunk_rid[lchunk[i]], lslot[i], Transform3D(btab_s[(int(yaw[i] * 5.0929582) & 31) * 4 + (i & 3)], p))
 			k += 1
 			continue
-		var p := pos[i]
 		var v := vel[i]
 		for w in wind_n:
 			var rel := p - wind_o[w]
@@ -549,16 +595,16 @@ func simulate(dt: float) -> void:
 				if dl > 0.01 and along / dl > wind_p[w * 4 + 1]:
 					var f := wind_p[w * 4 + 2] * (1.0 - along / wr * 0.7)
 					var tb := wind_p[w * 4 + 3]
-					v += (wd * f + Vector3(sin(i * 1.7 + time * 8.0) * tb, f * 0.28 + absf(sin(i * 3.1 + time * 5.0)) * tb, cos(i * 2.3 + time * 7.0) * tb)) * dt
-		v.y -= gdt
-		v *= air_drag
+					v += (wd * f + Vector3(sin(i * 1.7 + time * 8.0) * tb, f * 0.28 + absf(sin(i * 3.1 + time * 5.0)) * tb, cos(i * 2.3 + time * 7.0) * tb)) * ldt
+		v.y -= GRAV * ldt
+		v *= drag2 if far else drag1
 		if v.y < -2.2:
 			v.y = lerpf(v.y, -2.2, 0.25)
 		# Aleteo al caer: las hojas planean en vez de caer como piedras.
 		if v.y < 0.0:
-			v.x += sin(time * 4.3 + i) * 1.6 * dt + ambient_wind.x * dt
-			v.z += cos(time * 3.7 + i * 0.7) * 1.6 * dt + ambient_wind.z * dt
-		var np := p + v * dt
+			v.x += sin(time * 4.3 + i) * 1.6 * ldt + ambient_wind.x * ldt
+			v.z += cos(time * 3.7 + i * 0.7) * 1.6 * ldt + ambient_wind.z * ldt
+		var np := p + v * ldt
 		var c := cell_index(np.x, np.z)
 		if c < 0 or solid[c] != 0:
 			np.x = p.x
@@ -587,27 +633,29 @@ func simulate(dt: float) -> void:
 				v.y = -v.y * 0.12
 			else:
 				v.y = 0.0
-			v.x *= ground_fric
-			v.z *= ground_fric
+			var fr := fric2 if far else fric1
+			v.x *= fr
+			v.z *= fr
 			# Pendientes: las hojas sueltas ruedan cuesta abajo.
-			v.x -= (h10 - h00) * inv_cell * 2.2 * dt
-			v.z -= (h01 - h00) * inv_cell * 2.2 * dt
+			v.x -= (h10 - h00) * inv_cell * 2.2 * ldt
+			v.z -= (h01 - h00) * inv_cell * 2.2 * ldt
 			grounded = true
 		pos[i] = np
 		vel[i] = v
 		if c >= 0 and c != cell[i]:
 			_set_cell(i, c)
-		spin[i] *= 0.985
-		yaw[i] += spin[i] * dt
+		spin[i] *= 0.97 if far else 0.985
+		yaw[i] += spin[i] * ldt
 		if grounded and v.x * v.x + v.z * v.z < 0.05:
-			sleep_t[i] += dt
+			sleep_t[i] += ldt
 			if sleep_t[i] > 0.3:
 				_sleep(i)
 				continue
 		else:
 			sleep_t[i] = 0.0
 		if lchunk[i] >= 0:
-			var t := (i & 3) if grounded else 4 + ((int(time * 7.0) + i) & 3)
+			# Deslizándose por el suelo cuenta como en reposo (el shader la apoya); en el aire, su variante fija.
+			var t := 0 if grounded else 4 + (i & 3)
 			RenderingServer.multimesh_instance_set_transform(chunk_rid[lchunk[i]], lslot[i], Transform3D(btab[(int(yaw[i] * 5.0929582) & 31) * 8 + t], np))
 		k += 1
 	wind_n = 0
@@ -853,6 +901,47 @@ func count_in_radius(center: Vector3, radius: float) -> int:
 		for ix in range(r.position.x, r.end.x + 1):
 			total += cell_count[iz * gw + ix]
 	return total
+
+
+## Radio que abarca las max_n hojas que cogería capture_nearest(center, radius, max_n) (misma medida:
+## la altura cuenta a medias). Sirve para resaltar justo las hojas que se van a coger. Histograma de
+## 128 tramos de igual área: sin ordenar ni reservar memoria (se puede llamar en cada fotograma).
+func nearest_radius(center: Vector3, radius: float, max_n: int) -> float:
+	if max_n <= 0 or radius <= 0.0:
+		return 0.0
+	if _hist.size() != 128:
+		_hist.resize(128)
+	_hist.fill(0)
+	var r := _cell_range(center, radius)
+	var r2 := radius * radius
+	var inv := 128.0 / r2
+	var total := 0
+	for iz in range(r.position.y, r.end.y + 1):
+		for ix in range(r.position.x, r.end.x + 1):
+			var c := iz * gw + ix
+			if cell_count[c] == 0 or (cell_zone[c] > 0 and zone_allowed[cell_zone[c] - 1] == 0):
+				continue
+			var li := cell_head[c]
+			while li >= 0:
+				var st := state[li]
+				if st == S_SLEEP or st == S_AIR:
+					var d := pos[li] - center
+					d.y *= 0.5
+					var d2 := d.length_squared()
+					if d2 <= r2:
+						_hist[mini(int(d2 * inv), 127)] += 1
+						total += 1
+				li = nxt[li]
+	if total == 0:
+		return 0.0
+	if total <= max_n:
+		return radius
+	var acc := 0
+	for b in 128:
+		acc += _hist[b]
+		if acc >= max_n:
+			return sqrt(float(b + 1) / inv)
+	return radius
 
 
 ## Posiciones de hojas restantes en una zona (para el "radar" de las últimas hojas).

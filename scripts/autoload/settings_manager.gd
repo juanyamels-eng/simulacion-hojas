@@ -17,6 +17,7 @@ var values := {
 	"ambient": 0.7,
 	"haptics": true,
 	"show_fps": false,
+	"highlight_leaves": false,   # «Resaltar hojas»: contorno de color intenso en todas las hojas
 	"joystick_size": 1.0,
 }
 
